@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include "bch.h"
 #include "bits.h"
 #include "fec.h"
 #include "hamming.h"
@@ -24,6 +25,11 @@ static int sd84_dec(uint8_t *c, uint8_t *d) {
     return s == SECDED_DOUBLE ? -1 : s;
 }
 
+static void bch157_enc(const uint8_t *d, uint8_t *c) { bch_encode(bch157(), d, c); }
+static int bch157_dec(uint8_t *c, uint8_t *d) { return bch_decode(bch157(), c, d); }
+static void bch3116_enc(const uint8_t *d, uint8_t *c) { bch_encode(bch3116(), d, c); }
+static int bch3116_dec(uint8_t *c, uint8_t *d) { return bch_decode(bch3116(), c, d); }
+
 typedef struct {
     fec_code_info_t info;
     block_enc_fn enc;
@@ -35,6 +41,8 @@ static const code_entry_t CODES[] = {
     {{CODE_HAMMING74, "hamming74", "Hamming(7,4)", 7, 4, 1}, h74_enc, h74_dec},
     {{CODE_HAMMING1511, "hamming1511", "Hamming(15,11)", 15, 11, 1}, h1511_enc, h1511_dec},
     {{CODE_SECDED84, "secded84", "SECDED(8,4)", 8, 4, 1}, sd84_enc, sd84_dec},
+    {{CODE_BCH157, "bch157", "BCH(15,7)", 15, 7, 2}, bch157_enc, bch157_dec},
+    {{CODE_BCH3116, "bch3116", "BCH(31,16)", 31, 16, 3}, bch3116_enc, bch3116_dec},
 };
 
 #define NCODES ((int)(sizeof CODES / sizeof CODES[0]))

@@ -16,7 +16,7 @@ outputs -> commit `phaseN: <summary>` -> push.
 - [x] **Phase 3 - UDP pipeline**: bin/vehicle, bin/channel, bin/tollgate with CLI flags; per-frame
       receiver log (seq, code, flipped, corrected, CRC, class, decode latency us); coloured output
       (--no-color); --delay-ms; make demo / demo-hospital / compare; integration test; docs/DEMO.md.
-- [ ] **Phase 4 - Binary BCH**: BCH(15,7) t=2 and BCH(31,16) t=3, GF(2^m), syndromes,
+- [x] **Phase 4 - Binary BCH**: BCH(15,7) t=2 and BCH(31,16) t=3, GF(2^m), syndromes,
       Berlekamp-Massey, Chien search. Exhaustive tests (weight <= t) for BCH(15,7), randomized
       for BCH(31,16). Wired into the pipeline.
 - [ ] **Phase 5 - Benchmark**: bin/bench (in-process) sweeping code x model x parameter ->

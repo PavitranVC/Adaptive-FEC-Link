@@ -31,6 +31,10 @@ TEST(coded_sizes) {
     CHECK_EQ_INT(fec_coded_bits(&c, 128), 12 * 15);     /* ceil(128/11) = 12 blocks, padded */
     c = fec_config(CODE_SECDED84);
     CHECK_EQ_INT(fec_coded_bits(&c, 128), 32 * 8);
+    c = fec_config(CODE_BCH157);
+    CHECK_EQ_INT(fec_coded_bits(&c, 128), 19 * 15);     /* ceil(128/7) = 19 blocks */
+    c = fec_config(CODE_BCH3116);
+    CHECK_EQ_INT(fec_coded_bits(&c, 128), 8 * 31);
     c = fec_config(CODE_NONE);
     CHECK_EQ_INT(fec_coded_bits(&c, 128), 128);
     c = fec_config(CODE_HAMMING74);
@@ -79,6 +83,34 @@ TEST(all_codes_fix_one_error_per_block) {
     }
 }
 
+/* t errors in every block at once (BCH t = 2, 3) are all repaired. */
+TEST(bch_codes_fix_t_errors_per_block) {
+    rng_t r;
+    rng_seed(&r, 3);
+    const code_id_t ids[2] = {CODE_BCH157, CODE_BCH3116};
+    for (int i = 0; i < 2; i++) {
+        fec_config_t c = fec_config(ids[i]);
+        int t = fec_code_info(ids[i])->t, bn = fec_block_n(&c);
+        for (int trial = 0; trial < 300; trial++) {
+            uint8_t pay[K], coded[FEC_MAX_CODED_BITS], clean[FEC_MAX_CODED_BITS], out[K];
+            random_bits(&r, pay, K);
+            size_t n = fec_encode(&c, pay, K, coded);
+            memcpy(clean, coded, n);
+            int blocks = (int)(n / (size_t)bn), flipped = 0;
+            for (int b = 0; b < blocks; b++)
+                for (int e = 0; e < t; e++) {
+                    int pos = b * bn + (int)rng_below(&r, (uint32_t)bn);
+                    if (coded[pos] == clean[pos]) { coded[pos] ^= 1; flipped++; }
+                }
+            fec_result_t res;
+            fec_decode(&c, coded, n, out, K, &res);
+            CHECK(memcmp(pay, out, K) == 0);
+            CHECK_EQ_INT(res.corrected_bits, flipped);
+            CHECK_EQ_INT(res.failed_blocks, 0);
+        }
+    }
+}
+
 TEST(secded_failure_is_reported) {
     fec_config_t c = fec_config(CODE_SECDED84);
     uint8_t pay[K] = {0}, coded[FEC_MAX_CODED_BITS], out[K];
@@ -95,6 +127,7 @@ int main(void) {
     RUN(coded_sizes);
     RUN(all_codes_roundtrip_clean);
     RUN(all_codes_fix_one_error_per_block);
+    RUN(bch_codes_fix_t_errors_per_block);
     RUN(secded_failure_is_reported);
     return TEST_REPORT();
 }

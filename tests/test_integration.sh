@@ -44,10 +44,17 @@ check "hospital profile reported" [ "$(val profile)" = HOSPITAL_IMAGING ]
 check "ge model is hospital default" [ "$(val model)" = ge ]
 check "received 30" [ "$(val received)" = 30 ]
 
-echo "== integration: compare script"
-CODES="hamming74 secded84" sh tools/compare.sh $PORTS --seed 3 --count 50 >"$OUT" 2>&1
+echo "== integration: bch3116 end to end"
+sh tools/demo.sh $PORTS --no-color --profile toll --code bch3116 --seed 4 --count 30 \
+    --delay-ms 0 --idle-timeout-ms 3000 >"$OUT" 2>&1
+check "bch3116 run ok" [ $? -eq 0 ]
+check "bch3116 received 30" [ "$(val received)" = 30 ]
+check "bch3116 code reported" [ "$(val code)" = bch3116 ]
+
+echo "== integration: compare script (default codes hamming74 vs bch157)"
+sh tools/compare.sh $PORTS --seed 3 --count 50 >"$OUT" 2>&1
 check "compare ok" [ $? -eq 0 ]
-check "compare shows both codes" grep -q 'hamming74.*secded84' "$OUT"
+check "compare shows both codes" grep -q 'hamming74.*bch157' "$OUT"
 check "compare shows silent_wrong row" grep -q '^silent_wrong' "$OUT"
 
 if [ "$fail" -ne 0 ]; then

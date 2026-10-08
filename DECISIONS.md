@@ -70,3 +70,14 @@ Format: what was chosen / the alternative / why.
 - With `--delay-ms 0` the vehicle still sleeps 100 us between frames so loopback socket buffers
   never overflow (lost frames would distort the statistics).
 - Decode latency = FEC decode + CRC check of one frame, measured with CLOCK_MONOTONIC.
+
+## Phase 4
+
+- One generic binary BCH implementation (`bch_init(m, primitive poly, t)`) builds g(x) as the LCM
+  of minimal polynomials from cyclotomic cosets; BCH(15,7) and BCH(31,16) are two instances.
+  Primitive polynomials: GF(16) x^4+x+1, GF(32) x^5+x^2+1.
+- Decoder = syndromes -> Berlekamp-Massey -> Chien search (no Forney needed: binary errors).
+  A pattern is reported as a detected failure when deg Lambda > t or the number of Chien roots
+  differs from deg Lambda (it never outputs a non-codeword; tested exhaustively for weight 3).
+- Syndromes and Chien search use the straightforward O(n * t) evaluation (no Horner/LFSR tricks)
+  so the maths stays visible; latency is still only a few microseconds per frame.
