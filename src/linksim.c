@@ -46,6 +46,7 @@ typedef struct {               /* running state of one simulation */
     window_t win;
     sender_t snd;
     double rate_sum, level_sum;
+    unsigned long long bits_sent;
 } sim_state_t;
 
 /* Send the current attempt; returns the receiver's decode result and fills *t_rx. */
@@ -61,6 +62,7 @@ static void transmit(sim_state_t *s, const uint8_t *payload, double t_start, rx_
     *nbits = (int)fec_encode(&cfg, payload, PAYLOAD_BITS, coded);
     noise_apply(&s->ch, coded, (size_t)*nbits, NULL);
     s->tx++;
+    s->bits_sent += (unsigned long long)*nbits;
     s->rate_sum += (double)PAYLOAD_BITS / *nbits;
     s->level_sum += ladder_level_of(&cfg);
     rx_decode(&cfg, coded, (size_t)*nbits, d);
@@ -150,6 +152,10 @@ void linksim_run(const linksim_params_t *p, linksim_result_t *r, FILE *trace) {
     r->retx_per_frame = (double)(s.tx - p->frames) / n;
     r->mean_code_rate = s.tx ? s.rate_sum / s.tx : 0.0;
     r->mean_level = s.tx ? s.level_sum / s.tx : 0.0;
+    /* goodput: useful payload bits delivered per bit put on the air (parity + retransmissions
+     * count as cost; only CORRECT frames count as delivered) */
+    r->coded_bits_sent = s.bits_sent;
+    r->goodput = s.bits_sent ? (double)r->correct * PAYLOAD_BITS / (double)s.bits_sent : 0.0;
     if (nlat > 0) {
         double sum = 0;
         for (long i = 0; i < nlat; i++) sum += lat[i];

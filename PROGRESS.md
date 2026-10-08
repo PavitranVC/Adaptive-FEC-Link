@@ -30,6 +30,16 @@ Not run on macOS/WSL in this session (no machine available) - the code only uses
 (sockets, poll, clock_gettime, nanosleep, sigaction) and POSIX `sh`/`awk`, but please try
 `make test` on a Mac once.
 
+## Key finding (final polish, honest)
+
+The adaptive controller does NOT give "the strongest code's reliability at clearly lower
+overhead". On the toll -> hospital -> toll schedule (5000 frames): adaptive 99.94% correct,
+goodput 0.505, p99 33 ms; always-strongest HARQ + RS t=8 100%, goodput 0.490, p99 33 ms (only ~3%
+more overhead than adaptive); fixed HARQ + RS t=4 100%, goodput 0.612, p99 32 ms - better than
+adaptive on every metric. Reason: the ladder's lower rungs have lower code rates than RS t=4, so
+stepping down saves nothing. What adaptive does show: it reacts within ~80 frames to the
+hospital burst and never flaps (tests + `results/adaptive_level.png`). See DECISIONS.md.
+
 ## Known issues / limitations
 
 - Nothing known broken.

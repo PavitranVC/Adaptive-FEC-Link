@@ -54,6 +54,8 @@ typedef struct {
     double mean_latency_ms, p99_latency_ms;
     double mean_code_rate;    /* average over transmissions of 128 / coded bits */
     double mean_level;        /* average ladder level over transmissions (-1 if not on ladder) */
+    unsigned long long coded_bits_sent;  /* every coded bit put on the air, retransmissions incl. */
+    double goodput;           /* correct frames * 128 payload bits / coded_bits_sent */
 } linksim_result_t;
 
 void linksim_defaults(linksim_params_t *p);

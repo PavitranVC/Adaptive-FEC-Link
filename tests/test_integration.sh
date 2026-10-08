@@ -129,7 +129,7 @@ check "bench csv has rows for all 3 models" [ "$rows" -ge 3 ] && grep -q ',burst
 ./bin/bench --strategies --schedule toll:30,hospital:30 --trace results/tmp/trace_smoke.csv \
     --frames 50 --out results/tmp/bench_strategy_smoke.csv >"$OUT" 2>&1
 check "bench --strategies ok" [ $? -eq 0 ]
-check "strategy csv header" grep -q '^strategy,code,channel,frames,success_rate,silent_wrong_rate,retx_per_frame,mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes$' results/tmp/bench_strategy_smoke.csv
+check "strategy csv header" grep -q '^strategy,code,channel,frames,success_rate,silent_wrong_rate,retx_per_frame,mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes,goodput$' results/tmp/bench_strategy_smoke.csv
 check "strategy csv has arq and harq rows" grep -q '^arq,' results/tmp/bench_strategy_smoke.csv
 check "strategy csv has adaptive on the schedule" grep -q '^adaptive,ladder,schedule,' results/tmp/bench_strategy_smoke.csv
 check "adaptive trace written" grep -q '^frame,tx,segment,level,attempts,class,latency_ms$' results/tmp/trace_smoke.csv

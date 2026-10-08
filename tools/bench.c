@@ -20,7 +20,8 @@
  *   HOSPITAL_IMAGING (profile default models) and, with --schedule, the scheduled channel
  *   (channel = "schedule"); --trace FILE writes the adaptive controller's per-frame level there.
  *   CSV: strategy,code,channel,frames,success_rate,silent_wrong_rate,retx_per_frame,
- *        mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes
+ *        mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes,goodput
+ *   goodput = CORRECT frames * 128 payload bits / all coded bits sent (parity + retransmissions)
  */
 #include <stdio.h>
 #include <string.h>
@@ -90,15 +91,19 @@ static int build_variants(const cli_opts_t *o, int only_code, variant_t *vs) {
 
 /* ---------------------------------------------------------------- strategy comparison ---- */
 
-typedef struct { const char *label; strategy_t strategy; code_id_t code; } strat_row_t;
+typedef struct { const char *label; strategy_t strategy; code_id_t code; int rs_t; } strat_row_t;
 
+/* Fixed baselines include the two strongest codes of the adaptive ladder (RS t=4, RS t=8) with
+ * HARQ, so the adaptive controller is compared against "always use the strongest code". */
 static const strat_row_t STRAT_ROWS[] = {
-    {"fec", STRAT_FEC, CODE_HAMMING74}, {"fec", STRAT_FEC, CODE_BCH157},
-    {"fec", STRAT_FEC, CODE_BCH3116},   {"fec", STRAT_FEC, CODE_RS},
-    {"arq", STRAT_ARQ, CODE_NONE},
-    {"harq", STRAT_HARQ, CODE_HAMMING74}, {"harq", STRAT_HARQ, CODE_BCH157},
-    {"harq", STRAT_HARQ, CODE_BCH3116},
-    {"adaptive", STRAT_ADAPTIVE, CODE_NONE},
+    {"fec", STRAT_FEC, CODE_HAMMING74, 4}, {"fec", STRAT_FEC, CODE_BCH157, 4},
+    {"fec", STRAT_FEC, CODE_BCH3116, 4},   {"fec", STRAT_FEC, CODE_RS, 4},
+    {"fec", STRAT_FEC, CODE_RS, 8},
+    {"arq", STRAT_ARQ, CODE_NONE, 4},
+    {"harq", STRAT_HARQ, CODE_HAMMING74, 4}, {"harq", STRAT_HARQ, CODE_BCH157, 4},
+    {"harq", STRAT_HARQ, CODE_BCH3116, 4},   {"harq", STRAT_HARQ, CODE_RS, 4},
+    {"harq", STRAT_HARQ, CODE_RS, 8},
+    {"adaptive", STRAT_ADAPTIVE, CODE_NONE, 4},
 };
 
 static void base_params(const cli_opts_t *o, linksim_params_t *lp) {
@@ -123,15 +128,19 @@ static void strategy_row(FILE *csv, const char *channel, linksim_params_t *lp,
                          const strat_row_t *row, FILE *trace) {
     lp->strategy = row->strategy;
     lp->fixed = fec_config(row->code);
+    lp->fixed.rs_t = row->rs_t;
     linksim_result_t r;
     linksim_run(lp, &r, trace);
-    const char *code = row->strategy == STRAT_ADAPTIVE ? "ladder" : fec_code_name(row->code);
-    fprintf(csv, "%s,%s,%s,%ld,%.6f,%.6f,%.4f,%.3f,%.3f,%.4f,%ld\n", row->label, code, channel,
+    char code[24];
+    if (row->strategy == STRAT_ADAPTIVE) snprintf(code, sizeof code, "ladder");
+    else if (row->code == CODE_RS) snprintf(code, sizeof code, "rs_t%d", row->rs_t);
+    else snprintf(code, sizeof code, "%s", fec_code_name(row->code));
+    fprintf(csv, "%s,%s,%s,%ld,%.6f,%.6f,%.4f,%.3f,%.3f,%.4f,%ld,%.4f\n", row->label, code, channel,
             r.frames, r.success_rate, r.silent_wrong_rate, r.retx_per_frame, r.mean_latency_ms,
-            r.p99_latency_ms, r.mean_code_rate, r.level_changes);
-    printf("  %-9s %-10s %-17s success=%6.4f retx/frame=%6.3f latency mean=%7.2f ms p99=%7.2f ms rate=%.3f\n",
-           row->label, code, channel, r.success_rate, r.retx_per_frame, r.mean_latency_ms,
-           r.p99_latency_ms, r.mean_code_rate);
+            r.p99_latency_ms, r.mean_code_rate, r.level_changes, r.goodput);
+    printf("  %-9s %-10s %-17s success=%6.4f retx/frame=%6.3f p99=%7.2f ms rate=%.3f goodput=%.3f\n",
+           row->label, code, channel, r.success_rate, r.retx_per_frame, r.p99_latency_ms,
+           r.mean_code_rate, r.goodput);
 }
 
 static int run_strategies(const cli_opts_t *o) {
@@ -139,7 +148,7 @@ static int run_strategies(const cli_opts_t *o) {
     FILE *csv = fopen(path, "w");
     if (!csv) { perror(path); return 1; }
     fprintf(csv, "strategy,code,channel,frames,success_rate,silent_wrong_rate,retx_per_frame,"
-                 "mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes\n");
+                 "mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes,goodput\n");
     printf("bench --strategies: %ld frames per row, RTT %d ms, timeout %d ms, max %d retries -> %s\n",
            o->frames, o->rtt_ms, o->timeout_ms, o->max_retries, path);
     const profile_t *profs[2] = {&PROFILE_TOLL_PLAZA, &PROFILE_HOSPITAL_IMAGING};

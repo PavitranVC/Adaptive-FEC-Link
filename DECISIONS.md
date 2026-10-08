@@ -196,3 +196,20 @@ Format: what was chosen / the alternative / why.
 - Data path: the tollgate appends one JSON object per transmission to `--jsonl FILE` (flushed
   immediately); the server re-reads the file on each poll (runs are a few hundred lines). A frame's
   final class on the dashboard follows the same rule as the tollgate summary (first accepted copy).
+
+## Final polish - fair comparison and goodput
+
+- Strategy benchmark now includes the fixed baselines **HARQ + RS t=4** and **HARQ + RS t=8**
+  (and FEC RS t=8), i.e. "always use the strongest code of the ladder".
+- 🔀 **Goodput** = (CORRECT frames x 128 payload bits) / (all coded bits put on the air, parity and
+  retransmissions included). Payload = ID + CRC (128 bits), consistent with the code-rate
+  definition (128 / coded bits); counting only the 96 ID bits would scale every value by 0.75.
+  The frame header is not counted (it is the same for every strategy).
+- **Result (not tuned):** on toll:2000,hospital:2000,toll:2000 adaptive reaches 99.94% correct,
+  goodput 0.505, p99 33 ms; HARQ + RS t=8 100%, goodput 0.490, p99 33 ms; HARQ + RS t=4 100%,
+  goodput 0.612, p99 32 ms. The claim "adaptive matches the strongest code's reliability at
+  clearly lower overhead" does NOT hold: the saving vs RS t=8 is ~3%, and HARQ + RS t=4 dominates.
+  Cause: the ladder is ordered by burst robustness, not by code rate; its lower rungs (Hamming
+  0.571, BCH 0.449/0.516) cost more parity than RS t=4 (0.667). A ladder of RS codes with
+  t = 1..8 (rates 0.89 .. 0.50) would be the natural next experiment; it was deliberately not
+  done here so the reported numbers are not the result of tuning after seeing the data.

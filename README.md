@@ -71,14 +71,22 @@ tollgate -> vehicle on UDP 9002. The adaptive controller climbs a code ladder (u
 Hamming(7,4) -> BCH(15,7) -> BCH(31,16) -> RS t=4 -> RS t=8) using the receiver's sliding-window
 statistics, with hysteresis, and falls back to HARQ on CRC failure.
 
-On a channel that switches toll -> hospital -> toll (`make bench`, 5000 frames, RTT 20 ms):
+On a channel that switches toll -> hospital -> toll (`make bench`, 5000 frames, RTT 20 ms).
+Goodput = correctly delivered payload bits / all transmitted bits (parity + retransmissions).
 
-| strategy | correct | retransmissions / frame | p99 delivery latency |
-|---|---|---|---|
-| FEC RS t=4 (best fixed FEC) | 91.4% | 0 | 11 ms |
-| Stop-and-Wait ARQ (uncoded) | 81.9% | 1.78 | 94 ms |
-| Hybrid ARQ, BCH(31,16) | 99.4% | 0.20 | 76 ms |
-| **Adaptive** | **99.94%** | **0.08** | **33 ms** |
+| strategy | correct | goodput | code rate | retx / frame | p99 latency |
+|---|---|---|---|---|---|
+| FEC RS t=8 (no retransmission) | 98.02% | 0.490 | 0.500 | 0 | 12 ms |
+| Stop-and-Wait ARQ (uncoded) | 81.94% | 0.294 | 1.000 | 1.78 | 94 ms |
+| Hybrid ARQ, BCH(31,16) | 99.40% | 0.428 | 0.516 | 0.20 | 76 ms |
+| Hybrid ARQ, RS t=8 (strongest code) | 100.00% | 0.490 | 0.500 | 0.02 | 33 ms |
+| **Hybrid ARQ, RS t=4** | **100.00%** | **0.612** | 0.667 | 0.09 | 32 ms |
+| Adaptive ladder | 99.94% | 0.505 | 0.547 | 0.08 | 33 ms |
+
+Honest reading: adaptive matches the strongest code's latency and almost its reliability, but
+saves only ~3% overhead (goodput 0.505 vs 0.490), and fixed HARQ + RS t=4 beats it on every
+metric. The ladder's "cheap" rungs (Hamming 0.571, BCH 0.449/0.516) have a *lower* code rate than
+RS t=4 (0.667), so stepping down in quiet periods does not save bits. See `results/goodput_vs_success.png`.
 
 ![adaptive level](results/adaptive_level.png)
 

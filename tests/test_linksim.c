@@ -27,6 +27,21 @@ TEST(fec_has_no_retransmissions_and_constant_latency) {
     CHECK_NEAR(r.p99_latency_ms, r.mean_latency_ms, 1.0);
 }
 
+TEST(goodput_counts_parity_and_retransmissions) {
+    /* clean channel: goodput equals the code rate (only parity costs) */
+    linksim_params_t lp = base(STRAT_HARQ, CODE_HAMMING74, 0.0);
+    linksim_result_t r;
+    linksim_run(&lp, &r, NULL);
+    CHECK_NEAR(r.goodput, 128.0 / 224.0, 1e-9);
+    CHECK_EQ_INT(r.coded_bits_sent, 3000ULL * 224);
+    /* noisy uncoded ARQ: every retransmission lowers goodput below success / transmissions */
+    lp = base(STRAT_ARQ, CODE_NONE, 0.002);
+    lp.max_retries = 10;
+    linksim_run(&lp, &r, NULL);
+    CHECK_NEAR(r.goodput, r.correct / (double)r.transmissions, 1e-9);
+    CHECK(r.goodput < 0.8);
+}
+
 TEST(arq_recovers_by_retransmitting) {
     linksim_params_t lp = base(STRAT_ARQ, CODE_HAMMING74, 0.002);
     lp.max_retries = 10;
@@ -153,6 +168,7 @@ TEST(adaptive_does_not_oscillate_on_a_steady_channel) {
 
 int main(void) {
     RUN(fec_has_no_retransmissions_and_constant_latency);
+    RUN(goodput_counts_parity_and_retransmissions);
     RUN(arq_recovers_by_retransmitting);
     RUN(harq_beats_fec_and_needs_fewer_retx_than_arq);
     RUN(max_retries_bounds_transmissions);

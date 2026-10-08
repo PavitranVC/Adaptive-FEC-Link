@@ -206,7 +206,8 @@ make bench                      # results/bench.csv (+ bench_hospital.csv, bench
 ./bin/bench --strategies --schedule toll:2000,hospital:2000,toll:2000 --frames 5000 \
     --trace results/adaptive_trace.csv --out results/bench_strategy.csv  # fec/arq/harq/adaptive
 pip install -r requirements.txt
-make plots                      # results/*.png incl. strategy_comparison.png, adaptive_level.png
+make plots                      # results/*.png incl. strategy_comparison.png, adaptive_level.png,
+                                #   goodput_vs_success.png
 ```
 
 ## 6. Troubleshooting
@@ -235,4 +236,4 @@ Each line: what to say, and what to run or show while saying it. Numbers come fr
 | 5 | "In the hospital profile errors come in bursts. Reed-Solomon works on bytes, so a 16-bit burst touches at most 3 bytes - a few symbol errors it fixes easily. RS(24,16) gets 83% on the hospital channel with no interleaver at code rate 0.67; Hamming+interleaver gets 61%, BCH(31,16)+interleaver ties RS at 84% but needs more parity (rate 0.52) - and for very long 32-bit bursts the interleaved BCH is actually better." | `make demo-hospital CODE=rs`, `results/success_vs_burst_len_hospital.png` |
 | 6 | "Classic retransmission (ARQ) needs 1.8 extra transmissions per frame and a 94 ms worst case; FEC plus retransmit-on-failure (HARQ) cuts both." | `make demo-arq`, then `make demo-harq`; `results/strategy_comparison.png` |
 | 7 | "Our adaptive controller watches the receiver's error statistics and climbs the code ladder when the hospital interference starts, then steps back down when it ends." | `make demo-adaptive` (point at `LEVEL UP` / `LEVEL DOWN`), or `make dashboard` |
-| 8 | "Headline: on a channel that switches toll -> hospital -> toll, adaptive delivers 99.94% of IDs with 0.08 retransmissions per frame and a 33 ms worst case." | `results/adaptive_level.png` |
+| 8 | "Is adaptation worth it? Honestly: only partly. On the toll -> hospital -> toll channel adaptive delivers 99.94% of IDs with a 33 ms worst case, like always using the strongest code (RS t=8, 100%), but it saves only 3% of the transmitted bits (goodput 0.505 vs 0.490). Plain HARQ with RS t=4 does best here: 100% at goodput 0.61. The lesson: an adaptive ladder only pays off if its lower rungs really have higher code rates - ours (Hamming, BCH) do not." | `results/goodput_vs_success.png`, `results/adaptive_level.png` |

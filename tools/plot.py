@@ -149,6 +149,55 @@ def channel_color(ch):
     return CHANNEL_COLORS.get(ch, PALETTE[2])
 
 
+FAMILY_COLORS = {"fec": PALETTE[0], "arq": PALETTE[7], "harq": PALETTE[2], "adaptive": PALETTE[6]}
+
+
+def goodput_plot(rows, outdir):
+    """Goodput (useful payload bits per transmitted bit) vs success rate, one panel per channel."""
+    channels = []
+    for r in rows:
+        if r["channel"] not in channels:
+            channels.append(r["channel"])
+    fig, axes = plt.subplots(1, len(channels), figsize=(6 * len(channels), 5.6), facecolor=SURFACE,
+                             sharey=True)
+    if len(channels) == 1:
+        axes = [axes]
+    for ax, ch in zip(axes, channels):
+        pts = [r for r in rows if r["channel"] == ch]
+        span = max(r["success_rate"] for r in pts) - min(r["success_rate"] for r in pts) or 1.0
+        groups = []                     # points closer than ~2% of the axes share one label
+        for r in pts:
+            fam = r["strategy"]
+            ax.plot(r["success_rate"], r["goodput"], marker="D" if fam == "adaptive" else "o",
+                    markersize=11 if fam == "adaptive" else 8, linestyle="none",
+                    color=FAMILY_COLORS.get(fam, MUTED), markeredgecolor=SURFACE, markeredgewidth=1.5)
+            name = "ADAPTIVE" if fam == "adaptive" else f"{fam} {r['code']}"
+            for g in groups:
+                if abs(g[0] - r["success_rate"]) < 0.1 * span and abs(g[1] - r["goodput"]) < 0.035:
+                    g[2].append(name)
+                    break
+            else:
+                groups.append([r["success_rate"], r["goodput"], [name]])
+        for x, y, names in groups:
+            ax.annotate("\n".join(sorted(names, key=lambda n: -next(
+                r["goodput"] for r in pts if ("ADAPTIVE" if r["strategy"] == "adaptive" else f"{r['strategy']} {r['code']}") == n))), (x, y), fontsize=8, color=TEXT, va="center",
+                        xytext=(-8, 0), textcoords="offset points", ha="right")
+        style(ax, ch.replace("schedule", "scheduled channel (toll -> hospital -> toll)"),
+              "frame success rate", "goodput (payload bits / transmitted bits)" if ax is axes[0] else "")
+        lo = min(r["success_rate"] for r in pts)
+        ax.set_xlim(max(0.0, lo - 0.05), 1.03)
+    for fam, col in FAMILY_COLORS.items():
+        axes[-1].plot([], [], marker="D" if fam == "adaptive" else "o", linestyle="none", color=col, label=fam)
+    axes[-1].legend(frameon=False, fontsize=9, loc="upper left", labelcolor=TEXT)
+    fig.suptitle("Goodput vs reliability: top-right is best (parity and retransmissions both cost goodput)",
+                 color=TEXT, x=0.01, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    out = os.path.join(outdir, "goodput_vs_success.png")
+    fig.savefig(out, dpi=130)
+    plt.close(fig)
+    return out
+
+
 def strategy_plot(path, outdir):
     """Strategy comparison: success rate, latency (mean bar + p99 marker), retransmissions."""
     with open(path, newline="") as f:
@@ -156,6 +205,7 @@ def strategy_plot(path, outdir):
     for r in rows:
         for k in ("success_rate", "retx_per_frame", "mean_latency_ms", "p99_latency_ms", "mean_code_rate"):
             r[k] = float(r[k])
+        r["goodput"] = float(r.get("goodput") or 0.0)
     labels, seen = [], set()
     for r in rows:
         key = (r["strategy"], r["code"])
@@ -166,7 +216,8 @@ def strategy_plot(path, outdir):
     for r in rows:
         if r["channel"] not in channels:
             channels.append(r["channel"])
-    pretty_row = lambda k: k[0] + ("" if k[0] in ("arq", "adaptive") else " " + LABELS.get(k[1], k[1]))
+    rs_label = {"rs_t4": "RS t=4", "rs_t8": "RS t=8"}
+    pretty_row = lambda k: k[0] + ("" if k[0] in ("arq", "adaptive") else " " + rs_label.get(k[1], LABELS.get(k[1], k[1])))
     fig, axes = plt.subplots(1, 3, figsize=(15, 0.42 * len(labels) * len(channels) / 2 + 2.6),
                              facecolor=SURFACE, sharey=True)
     h = 0.8 / len(channels)
@@ -200,6 +251,8 @@ def strategy_plot(path, outdir):
     out = os.path.join(outdir, "strategy_comparison.png")
     fig.savefig(out, dpi=130)
     plt.close(fig)
+    if "goodput" in rows[0]:
+        print("wrote", goodput_plot(rows, outdir))
     return out
 
 
