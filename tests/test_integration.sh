@@ -96,6 +96,30 @@ check "controller stepped up" grep -q 'LEVEL UP' "$OUT"
 check "controller stepped back down" grep -q 'LEVEL DOWN' "$OUT"
 check "adaptive mostly correct (>= 190)" [ "$(val correct)" -ge 190 ]
 
+echo "== integration: live JSON-lines log + dashboard server"
+sh tools/demo.sh $PORTS --no-color --quiet --strategy harq --code hamming74 --seed 2 --count 25 \
+    --rtt-ms 1 --delay-ms 0 --idle-timeout-ms 3000 --jsonl results/tmp/live_test.jsonl >"$OUT" 2>&1
+check "jsonl run ok" [ $? -eq 0 ]
+check "one json line per transmission" [ "$(wc -l <results/tmp/live_test.jsonl | tr -d ' ')" = "$(val transmissions)" ]
+if command -v python3 >/dev/null 2>&1; then
+    check "dashboard aggregates the log" python3 -c "
+import json, subprocess, sys
+s = json.loads(subprocess.check_output([sys.executable, 'tools/dashboard.py', '--log', 'results/tmp/live_test.jsonl', '--once']))
+sys.exit(0 if s['frames'] == 25 and sum(s['counts'].values()) == 25 else 1)"
+    check "dashboard serves page and state" python3 -c "
+import json, subprocess, sys, time, urllib.request
+p = subprocess.Popen([sys.executable, 'tools/dashboard.py', '--log', 'results/tmp/live_test.jsonl', '--port', '19180'], stdout=subprocess.DEVNULL)
+try:
+    for _ in range(50):
+        try:
+            page = urllib.request.urlopen('http://127.0.0.1:19180/').read().decode(); break
+        except OSError: time.sleep(0.1)
+    state = json.loads(urllib.request.urlopen('http://127.0.0.1:19180/api/state').read())
+    sys.exit(0 if 'FEC link' in page and state['frames'] == 25 else 1)
+finally:
+    p.terminate()"
+fi
+
 echo "== integration: bench smoke test"
 ./bin/bench --profile toll --frames 50 --code hamming74 --out results/tmp/bench_smoke.csv >"$OUT" 2>&1
 check "bench ok" [ $? -eq 0 ]

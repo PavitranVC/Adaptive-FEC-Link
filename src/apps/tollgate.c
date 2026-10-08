@@ -50,6 +50,7 @@ typedef struct {
     window_t win;
     rng_t fb_rng;
     long fb_sent, fb_dropped;
+    FILE *jsonl;               /* --jsonl live log (dashboard) */
     unsigned long long flipped, corrected;
     double lat_sum, lat_max;
     int code, rs_t, interleave, nbits;
@@ -133,6 +134,18 @@ static void print_report(const frame_report_t *r, const char *code) {
              r->tag_rx, r->lat_us);
 }
 
+/* One JSON object per transmission, flushed at once so the dashboard sees it live. */
+static void write_jsonl(FILE *f, const packet_t *p, const frame_report_t *r, const rx_decode_t *d) {
+    const profile_t *prof = p->has_truth ? profile_by_id(p->truth.profile) : NULL;
+    fprintf(f, "{\"seq\":%u,\"attempt\":%d,\"code\":\"%s\",\"level\":%d,\"flipped\":%d,"
+               "\"corrected\":%d,\"crc_ok\":%s,\"class\":\"%s\",\"lat_us\":%.3f,"
+               "\"profile\":\"%s\",\"strategy\":\"%s\"}\n",
+            r->seq, r->attempt, fec_code_name(d->cfg.code), ladder_level_of(&d->cfg), r->flipped,
+            r->corrected, r->crc_ok ? "true" : "false", frame_class_name(r->cls), r->lat_us,
+            prof ? prof->label : "?", strategy_name((strategy_t)p->strategy));
+    fflush(f);
+}
+
 /* Decodes and reports one transmission; returns its class, or -1 if it was dropped. */
 static int handle_data(const cli_opts_t *o, packet_t *p, stats_t *st, FILE *log, rx_decode_t *dout) {
     uint8_t rx[PACKET_MAX_BITS];
@@ -175,6 +188,7 @@ static int handle_data(const cli_opts_t *o, packet_t *p, stats_t *st, FILE *log,
     if (log)
         fprintf(log, "%u,%s,%d,%d,%d,%s,%.3f,%s,%s\n", r.seq, fec_code_name(fc.code), r.flipped,
                 r.corrected, r.crc_ok, frame_class_name(r.cls), r.lat_us, r.tag_true, r.tag_rx);
+    if (st->jsonl) write_jsonl(st->jsonl, p, &r, &d);
     *dout = d;
     return (int)r.cls;
 }
@@ -310,6 +324,7 @@ int main(int argc, char **argv) {
     st.sent = -1;
     st.profile = st.model = -1;
     st.fbfd = net_udp_socket();
+    st.jsonl = o.jsonl_path ? fopen(o.jsonl_path, "w") : NULL;
     window_init(&st.win, o.window);
     rng_seed(&st.fb_rng, rng_derive(o.seed, "tollgate-fbdrop"));
     int got_first = 0;
@@ -353,5 +368,6 @@ int main(int argc, char **argv) {
     if (log) fclose(log);
     net_close(fd);
     net_close(st.fbfd);
+    if (st.jsonl) fclose(st.jsonl);
     return 0;
 }

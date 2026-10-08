@@ -65,7 +65,8 @@ void cli_usage(FILE *f, const char *prog) {
         "  --down-threshold <float>    adaptive: step down if predicted failure < this (0.05)\n"
         "  --start-level <int>         adaptive: start level 0..5 (default 1)\n"
         "  --schedule <spec>           channel: profile schedule, e.g. toll:200,hospital:200\n"
-        "  --strategies [--trace FILE] bench: compare strategies on the --schedule channel\n",
+        "  --strategies [--trace FILE] bench: compare strategies on the --schedule channel\n"
+        "  --jsonl <file>              tollgate: live JSON-lines log (one line per transmission)\n",
         prog);
 }
 
@@ -178,6 +179,8 @@ static int apply_flag(cli_opts_t *o, const char *f, const char *v) {
         o->schedule = v;
     } else if (!strcmp(f, "--trace")) {
         o->trace_path = v;
+    } else if (!strcmp(f, "--jsonl")) {
+        o->jsonl_path = v;
     } else {
         fprintf(stderr, "error: unknown flag '%s' (try --help)\n", f);
         return -1;
@@ -202,7 +205,7 @@ static int is_value_flag(const char *f) {
         "--burst-len", "--rs-t", "--interleave", "--host", "--channel-port", "--tollgate-port",
         "--feedback-port", "--idle-timeout-ms", "--log", "--summary-file", "--out", "--frames",
         "--strategy", "--rtt-ms", "--timeout-ms", "--max-retries", "--fb-drop", "--window",
-        "--up-threshold", "--down-threshold", "--start-level", "--schedule", "--trace"};
+        "--up-threshold", "--down-threshold", "--start-level", "--schedule", "--trace", "--jsonl"};
     for (size_t i = 0; i < sizeof FLAGS / sizeof FLAGS[0]; i++)
         if (!strcmp(f, FLAGS[i])) return 1;
     return 0;

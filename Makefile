@@ -9,6 +9,7 @@
 #   make demo-arq      one-terminal demo, Stop-and-Wait ARQ (uncoded + CRC, retransmit)
 #   make demo-harq     one-terminal demo, Hybrid ARQ (FEC first, retransmit on CRC fail)
 #   make demo-adaptive adaptive code ladder on a toll -> hospital -> toll channel schedule
+#   make dashboard     live web dashboard (http://127.0.0.1:8050/) + the adaptive demo
 #   make compare       hamming74 vs bch157 on the same seed, side by side
 #   make bench         in-process benchmark sweep -> results/bench.csv
 #   make plots         results/bench.csv -> results/*.png (needs matplotlib)
@@ -47,7 +48,7 @@ FRAMES  ?= 5000
 SCHEDULE ?= toll:2000,hospital:2000,toll:2000
 ASCHED  ?= toll:60,hospital:80,toll:100
 
-.PHONY: all test unit-test integration-test demo demo-hospital demo-arq demo-harq demo-adaptive compare bench plots clean
+.PHONY: all test unit-test integration-test demo demo-hospital demo-arq demo-harq demo-adaptive dashboard compare bench plots clean
 
 all: $(APPS)
 
@@ -88,6 +89,7 @@ unit-test: $(TEST_BINS)
 
 integration-test: all
 	@if [ -f tests/test_integration.sh ]; then sh tests/test_integration.sh; fi
+	@if command -v $(PYTHON) >/dev/null 2>&1; then $(PYTHON) tests/test_dashboard.py; fi
 
 demo: all
 	sh tools/demo.sh --profile toll --code $(CODE) --seed $(SEED) --count $(COUNT) --delay-ms $(DELAY)
@@ -104,6 +106,10 @@ demo-harq: all
 demo-adaptive: all
 	sh tools/demo.sh --strategy adaptive --schedule $(ASCHED) --window 16 --seed $(SEED) \
 		--count 240 --delay-ms 40 --rtt-ms 10
+
+dashboard: all
+	sh tools/dashboard.sh --strategy adaptive --schedule $(ASCHED) --window 16 --seed $(SEED) \
+		--count 240 --delay-ms 120 --rtt-ms 10
 
 compare: all
 	CODES="hamming74 bch157" sh tools/compare.sh --profile toll --seed $(SEED) --count $(CCOUNT)

@@ -22,7 +22,9 @@ TEST(fec_has_no_retransmissions_and_constant_latency) {
     CHECK_EQ_INT(r.frames, 3000);
     CHECK_EQ_INT(r.transmissions, 3000);
     CHECK_NEAR(r.success_rate, 0.935, 0.02);       /* matches the plain FEC benchmark */
-    CHECK_NEAR(r.p99_latency_ms, r.mean_latency_ms, 0.01);
+    /* no retransmission tail: a tail would add >= one RTT (20 ms). The tolerance only absorbs
+     * the real, measured decode time (microseconds, occasionally slower under machine load). */
+    CHECK_NEAR(r.p99_latency_ms, r.mean_latency_ms, 1.0);
 }
 
 TEST(arq_recovers_by_retransmitting) {

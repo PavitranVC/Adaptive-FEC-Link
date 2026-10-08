@@ -74,8 +74,9 @@ TEST(week2_flags) {
     const char *argv[] = {"x", "--strategy", "harq", "--rtt-ms", "30", "--timeout-ms", "150",
                           "--max-retries", "6", "--fb-drop", "0.1", "--window", "16",
                           "--up-threshold", "0.2", "--down-threshold", "0.02", "--start-level", "3",
-                          "--schedule", "toll:10,hospital:10"};
-    CHECK_EQ_INT(parse(&o, 21, argv), 0);
+                          "--schedule", "toll:10,hospital:10", "--jsonl", "live.jsonl"};
+    CHECK_EQ_INT(parse(&o, 23, argv), 0);
+    CHECK(o.jsonl_path && !strcmp(o.jsonl_path, "live.jsonl"));
     CHECK(o.strategy == STRAT_HARQ);
     CHECK_EQ_INT(o.rtt_ms, 30);
     CHECK_EQ_INT(o.timeout_ms, 150);

@@ -77,6 +77,22 @@ within seconds), `--up-threshold` (0.20), `--down-threshold` (0.05), `--start-le
 `--schedule profile:transmissions,...` (channel). Ladder: L0 uncoded, L1 Hamming(7,4),
 L2 BCH(15,7), L3 BCH(31,16), L4 RS t=4, L5 RS t=8. HARQ retransmits on CRC failure.
 
+### Live dashboard (week 2)
+
+```sh
+make dashboard                 # prints: open http://127.0.0.1:8050/  then runs the adaptive demo
+PORT=8080 make dashboard       # other port
+```
+
+`make dashboard` starts `tools/dashboard.py` (Python standard library only, no pip needed) and,
+3 s later, the adaptive demo with the tollgate writing a JSON-lines live log
+(`--jsonl results/tmp/live.jsonl`, one line per transmission). Open the URL on the projector:
+counters (CORRECT / DETECTED_FAIL / SILENT_WRONG, retransmissions, decode latency), the last 40
+transmissions (bits flipped vs bits corrected, failed frames marked), and the code level over time
+on top of the channel profile. The page follows the OS light/dark setting and refreshes twice a
+second. After the demo the dashboard keeps showing the final state until Ctrl-C.
+Any run can feed it: `./bin/tollgate ... --jsonl FILE` + `python3 tools/dashboard.py --log FILE`.
+
 ## 2. Three-terminal demo (shows that they really are separate processes)
 
 Use the **same flags** in all three terminals; start them in this order:

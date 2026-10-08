@@ -187,3 +187,12 @@ Format: what was chosen / the alternative / why.
 - Results (`make bench`, schedule toll:2000,hospital:2000,toll:2000, 5000 frames): adaptive
   99.94% correct, 0.076 retransmissions/frame, p99 33 ms, mean code rate 0.547; best fixed HARQ
   (BCH(31,16)) 99.40%, 0.198, p99 76 ms; ARQ 81.9%, 1.78, p99 94 ms; best plain FEC (RS) 91.4%.
+
+## Week 2 - task 4: live dashboard
+
+- 🔀 Dashboard uses the **Python standard library only** (`http.server` + one inline HTML/SVG page
+  polling `/api/state` every 500 ms). Alternative: Flask (+ requirements.txt). Why: nothing to
+  install on the presentation laptop; the page is small enough not to need a framework.
+- Data path: the tollgate appends one JSON object per transmission to `--jsonl FILE` (flushed
+  immediately); the server re-reads the file on each poll (runs are a few hundred lines). A frame's
+  final class on the dashboard follows the same rule as the tollgate summary (first accepted copy).

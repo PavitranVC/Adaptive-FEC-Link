@@ -32,7 +32,7 @@ outputs -> commit `phaseN: <summary>` -> push.
 - [x] Hybrid ARQ: FEC first, retransmit only when the CRC fails (uses feedback port 9002).
 - [x] Adaptive controller: receiver feedback steps the code level up/down
       (hamming74 -> bch157 -> bch3116 -> rs ...) with hysteresis.
-- [ ] Live Python web dashboard (reads tollgate log / feedback stream).
+- [x] Live Python web dashboard (tollgate --jsonl + tools/dashboard.py, `make dashboard`).
 - [ ] Deliberate failure-injection testing (malformed packets, lost END, port in use, bursts
       longer than the code can handle, header corruption experiment).
 - [ ] Final report plots (both profiles, all codes, ARQ vs FEC vs HARQ vs adaptive).

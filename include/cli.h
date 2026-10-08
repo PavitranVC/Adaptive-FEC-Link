@@ -52,6 +52,7 @@ typedef struct {
     const char *schedule;      /* --schedule "toll:200,hospital:200" (channel) */
     int strategies;            /* --strategies    bench: strategy comparison mode */
     const char *trace_path;    /* --trace FILE    bench: adaptive level trace CSV */
+    const char *jsonl_path;    /* --jsonl FILE    tollgate: live JSON-lines log for the dashboard */
 } cli_opts_t;
 
 void cli_defaults(cli_opts_t *o);
