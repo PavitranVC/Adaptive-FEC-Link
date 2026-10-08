@@ -1,0 +1,2 @@
+# Python is used ONLY for plotting (tools/plot.py) and, in week 2, the dashboard.
+matplotlib>=3.5

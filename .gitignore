@@ -1,0 +1,33 @@
+# Build outputs
+build/
+bin/
+# (bin/.gitkeep is force-added once: git add -f bin/.gitkeep)
+*.o
+*.a
+*.so
+*.d
+*.out
+*.exe
+*.dSYM/
+
+# Test binaries (built into build/tests/, listed here explicitly as well)
+tests/test_*
+!tests/test_*.c
+!tests/test_*.sh
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Logs and data
+*.log
+results/*.csv
+results/tmp/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
