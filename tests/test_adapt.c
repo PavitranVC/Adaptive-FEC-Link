@@ -66,6 +66,16 @@ static feedback_t window_fb(const adapt_t *a, int n, int fails, double ber) {
     return f;
 }
 
+/* Feeds the same window feedback k times (the controller decides once per W feedbacks). */
+static int feed(adapt_t *a, int n, int fails, double ber, int k) {
+    int moved = 0;
+    for (int i = 0; i < k; i++) {
+        feedback_t f = window_fb(a, n, fails, ber);
+        moved += adapt_update(a, &f);
+    }
+    return moved;
+}
+
 static adapt_t make(int start) {
     adapt_params_t p;
     adapt_defaults(&p);
@@ -78,27 +88,25 @@ static adapt_t make(int start) {
 TEST(steps_up_on_failures_only_with_a_full_window) {
     adapt_t a = make(1);
     int W = a.p.window;
-    feedback_t f = window_fb(&a, W - 1, W - 1, 0.01);   /* terrible, but not enough evidence */
-    CHECK_EQ_INT(adapt_update(&a, &f), 0);
-    f = window_fb(&a, W, W / 2, 0.01);                  /* 50% failures > up threshold */
-    CHECK_EQ_INT(adapt_update(&a, &f), +1);
+    CHECK_EQ_INT(feed(&a, W - 1, W - 1, 0.01, 3 * W), 0);  /* terrible, but window not full */
+    CHECK_EQ_INT(feed(&a, W, W / 2, 0.01, 1), +1);         /* 50% failures > up threshold */
     CHECK_EQ_INT(a.level, 2);
-    f = window_fb(&a, W, W / 2, 0.01);
-    f.level = 1;                                        /* stale: describes the old level */
-    CHECK_EQ_INT(adapt_update(&a, &f), 0);
-    CHECK_EQ_INT(a.level, 2);
+    CHECK_EQ_INT(feed(&a, W, W / 2, 0.01, W - 1), 0);      /* new level: needs W fresh frames */
+    CHECK_EQ_INT(feed(&a, W, W / 2, 0.01, 1), +1);
+    CHECK_EQ_INT(a.level, 3);
+    feedback_t f = window_fb(&a, W, W / 2, 0.01);
+    f.level = 2;                                           /* stale: describes the old level */
+    for (int i = 0; i < 2 * W; i++) CHECK_EQ_INT(adapt_update(&a, &f), 0);
+    CHECK_EQ_INT(a.level, 3);
 }
 
 TEST(steps_down_only_when_lower_level_is_predicted_safe) {
     adapt_t a = make(5);
     int W = a.p.window;
-    /* p = 0.01: RS(t=4) predicted ~3% failures -> may step to L4 ... */
-    long steps = 0;
-    for (int i = 0; i < 20 * W; i++) {
-        feedback_t f = window_fb(&a, W, 0, 0.01);
-        steps += adapt_update(&a, &f) != 0;
-    }
-    /* ...and on down to BCH(15,7) (0.8%), but NOT to Hamming(7,4) (6.3% > down threshold) */
+    /* p = 0.01: RS(t=4) predicted ~3.6% failures -> may step to L4, then to BCH(31,16) and
+     * BCH(15,7) (0.8%), but NOT to Hamming(7,4) (6.3% > down threshold 5%) */
+    int steps = 0;
+    for (int i = 0; i < 40; i++) steps += feed(&a, W, 0, 0.01, W) != 0;
     CHECK_EQ_INT(a.level, 2);
     CHECK_EQ_INT(steps, 3);
 }
@@ -106,27 +114,37 @@ TEST(steps_down_only_when_lower_level_is_predicted_safe) {
 TEST(no_step_down_while_failures_are_present) {
     adapt_t a = make(3);
     int W = a.p.window;
-    for (int i = 0; i < 10 * W; i++) {
-        feedback_t f = window_fb(&a, W, (int)(W * a.p.up_threshold), 0.0005);
-        CHECK_EQ_INT(adapt_update(&a, &f), 0);   /* failure rate between thresholds: hold */
-    }
+    /* failure rate between the thresholds (12.5%): hold the level */
+    CHECK_EQ_INT(feed(&a, W, W / 8, 0.0005, 20 * W), 0);
     CHECK_EQ_INT(a.level, 3);
 }
 
 TEST(failed_probe_doubles_the_hold_time) {
     adapt_t a = make(3);
     int W = a.p.window;
-    feedback_t f;
     int guard = 0;
-    while (a.level == 3 && guard++ < 100 * W) { f = window_fb(&a, W, 0, 0.001); adapt_update(&a, &f); }
+    while (a.level == 3 && guard++ < 100 * W) feed(&a, W, 0, 0.001, 1);
     CHECK_EQ_INT(a.level, 2);                    /* probed down */
     CHECK_EQ_INT(a.hold, 1);
-    f = window_fb(&a, W, W, 0.001);              /* the lower level fails at once */
-    CHECK_EQ_INT(adapt_update(&a, &f), +1);
+    CHECK_EQ_INT(feed(&a, W, W, 0.001, W), +1);  /* the lower level fails at once */
     CHECK_EQ_INT(a.hold, 2);                     /* next probe only after 2 windows */
+    CHECK_EQ_INT(a.failed_probes, 1);
     long frames = 0;
-    while (a.level == 3 && frames < 100 * W) { f = window_fb(&a, W, 0, 0.001); adapt_update(&a, &f); frames++; }
+    while (a.level == 3 && frames < 100 * W) { feed(&a, W, 0, 0.001, 1); frames++; }
     CHECK(frames >= 2 * W);
+}
+
+TEST(successful_probe_resets_the_hold) {
+    adapt_t a = make(3);
+    int W = a.p.window;
+    a.hold = 4;
+    int guard = 0;
+    while (a.level == 3 && guard++ < 100 * W) feed(&a, W, 0, 0.0001, 1);
+    CHECK_EQ_INT(a.level, 2);
+    a.p.min_level = 2;                           /* keep it here for the check */
+    feed(&a, W, 0, 0.004, 3 * W);                /* lower level copes for 3 windows */
+    CHECK_EQ_INT(a.level, 2);
+    CHECK_EQ_INT(a.hold, 1);
 }
 
 int main(void) {
@@ -137,5 +155,6 @@ int main(void) {
     RUN(steps_down_only_when_lower_level_is_predicted_safe);
     RUN(no_step_down_while_failures_are_present);
     RUN(failed_probe_doubles_the_hold_time);
+    RUN(successful_probe_resets_the_hold);
     return TEST_REPORT();
 }

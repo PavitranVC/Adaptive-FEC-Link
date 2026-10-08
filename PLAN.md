@@ -30,7 +30,7 @@ outputs -> commit `phaseN: <summary>` -> push.
 - [x] Ground-truth integrity check (decision #6): receiver module + truth-stripping test.
 - [x] Stop-and-Wait ARQ baseline (simulated RTT / timeout) - the "retransmission" strawman.
 - [x] Hybrid ARQ: FEC first, retransmit only when the CRC fails (uses feedback port 9002).
-- [ ] Adaptive controller: receiver feedback steps the code level up/down
+- [x] Adaptive controller: receiver feedback steps the code level up/down
       (hamming74 -> bch157 -> bch3116 -> rs ...) with hysteresis.
 - [ ] Live Python web dashboard (reads tollgate log / feedback stream).
 - [ ] Deliberate failure-injection testing (malformed packets, lost END, port in use, bursts

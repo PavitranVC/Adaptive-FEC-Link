@@ -43,6 +43,8 @@ typedef struct {
     uint64_t seed;
     int nseg;
     linksim_seg_t seg[LINKSIM_MAX_SEG];
+    int *level_trace;         /* optional, frames entries: code level at each frame's start */
+    int *segment_trace;       /* optional, frames entries: channel segment at each frame's start */
 } linksim_params_t;
 
 typedef struct {

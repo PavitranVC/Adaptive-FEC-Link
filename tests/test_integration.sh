@@ -85,19 +85,35 @@ check "harq all 20 frames correct" [ "$(val correct)" = 20 ]
 check "harq feedback really dropped" [ "$(val feedback_dropped)" -ge 1 ]
 check "harq vehicle timed out" grep -q 'timeout (no feedback' "$OUT"
 
+echo "== integration: adaptive controller on a toll -> hospital -> toll schedule"
+sh tools/demo.sh $PORTS --no-color --strategy adaptive --schedule toll:40,hospital:100,toll:200 \
+    --window 8 --seed 42 --count 200 --rtt-ms 1 --delay-ms 0 --idle-timeout-ms 3000 >"$OUT" 2>&1
+check "adaptive run ok" [ $? -eq 0 ]
+check "adaptive strategy reported" [ "$(val strategy)" = adaptive ]
+check "adaptive every frame accounted once" [ "$(val received)" = 200 ]
+check "channel switched profile" grep -q 'interference changes: HOSPITAL_IMAGING' "$OUT"
+check "controller stepped up" grep -q 'LEVEL UP' "$OUT"
+check "controller stepped back down" grep -q 'LEVEL DOWN' "$OUT"
+check "adaptive mostly correct (>= 190)" [ "$(val correct)" -ge 190 ]
+
 echo "== integration: bench smoke test"
 ./bin/bench --profile toll --frames 50 --code hamming74 --out results/tmp/bench_smoke.csv >"$OUT" 2>&1
 check "bench ok" [ $? -eq 0 ]
 check "bench csv header" grep -q '^code,model,param,frames,frame_success_rate,detected_fail_rate,silent_wrong_rate,code_rate,mean_decode_us$' results/tmp/bench_smoke.csv
 rows=$(grep -c '^hamming74,' results/tmp/bench_smoke.csv)
 check "bench csv has rows for all 3 models" [ "$rows" -ge 3 ] && grep -q ',burst,' results/tmp/bench_smoke.csv
-./bin/bench --strategies --frames 50 --out results/tmp/bench_strategy_smoke.csv >"$OUT" 2>&1
+./bin/bench --strategies --schedule toll:30,hospital:30 --trace results/tmp/trace_smoke.csv \
+    --frames 50 --out results/tmp/bench_strategy_smoke.csv >"$OUT" 2>&1
 check "bench --strategies ok" [ $? -eq 0 ]
 check "strategy csv header" grep -q '^strategy,code,channel,frames,success_rate,silent_wrong_rate,retx_per_frame,mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes$' results/tmp/bench_strategy_smoke.csv
 check "strategy csv has arq and harq rows" grep -q '^arq,' results/tmp/bench_strategy_smoke.csv
+check "strategy csv has adaptive on the schedule" grep -q '^adaptive,ladder,schedule,' results/tmp/bench_strategy_smoke.csv
+check "adaptive trace written" grep -q '^frame,tx,segment,level,attempts,class,latency_ms$' results/tmp/trace_smoke.csv
 if command -v python3 >/dev/null 2>&1 && python3 -c "import matplotlib" 2>/dev/null; then
     python3 tools/plot.py results/tmp/bench_strategy_smoke.csv --outdir results/tmp >"$OUT" 2>&1
     check "strategy plot runs" [ $? -eq 0 ]
+    python3 tools/plot.py results/tmp/trace_smoke.csv --outdir results/tmp >"$OUT" 2>&1
+    check "adaptive level plot runs" [ $? -eq 0 ]
     python3 tools/plot.py results/tmp/bench_smoke.csv --outdir results/tmp >"$OUT" 2>&1
     check "plot.py runs" [ $? -eq 0 ]
 else

@@ -6,6 +6,9 @@
  * It also acts as the evaluation "oracle": it knows the clean codeword and the true tag ID, and
  * appends them (plus the number of flipped bits) as a ground-truth sidecar. The tollgate uses
  * that ONLY to classify frames (SILENT_WRONG detection), never to decode.
+ *
+ * --schedule "toll:200,hospital:200,toll:200" switches the interference profile after the given
+ * number of transmissions (retransmissions included); the last profile then stays in force.
  */
 #include <stdio.h>
 #include <string.h>
@@ -16,6 +19,7 @@
 #include "netutil.h"
 #include "noise.h"
 #include "packet.h"
+#include "schedule.h"
 #include "term.h"
 
 #define TAG "CHANNEL"
@@ -25,6 +29,28 @@ typedef struct {
     long frames;
     unsigned long long bits, flips;
 } channel_stats_t;
+
+typedef struct {               /* the optional profile schedule */
+    int active, seg;
+    schedule_t sched;
+} channel_sched_t;
+
+/* Before transmission number tx: switch the noise to the scheduled profile if it changed. */
+static const profile_t *apply_schedule(const cli_opts_t *o, channel_sched_t *cs, noise_t *ch, long tx) {
+    if (!cs->active) return o->profile;
+    int seg = schedule_segment_at(&cs->sched, tx);
+    if (seg != cs->seg) {
+        noise_params_t np = schedule_noise(&cs->sched, seg, o->model_set, o->model, o->p);
+        char desc[200];
+        noise_set_params(ch, &np);
+        cs->seg = seg;
+        noise_describe(&np, desc, sizeof desc);
+        term_say(TAG, COL, "%s%s=== interference changes: %s from transmission %ld (%s) ===%s",
+                 term_c(T_BOLD), term_c(T_YELLOW), cs->sched.seg[seg].profile->label, tx, desc,
+                 term_c(T_RESET));
+    }
+    return cs->sched.seg[seg].profile;
+}
 
 /* The true tag ID: decode the CLEAN codeword (an error-free codeword decodes exactly). */
 static void true_tag(const fec_config_t *fc, const uint8_t *clean, size_t nbits,
@@ -52,8 +78,8 @@ static void print_positions(const packet_t *p, const uint8_t *mask) {
              p->nbits, term_c(T_RESET), p->truth.flips ? " at " : "", list);
 }
 
-static int process_data(const cli_opts_t *o, noise_t *ch, packet_t *p, uint8_t *mask,
-                        FILE *log, channel_stats_t *st) {
+static int process_data(const cli_opts_t *o, const profile_t *prof, noise_t *ch, packet_t *p,
+                        uint8_t *mask, FILE *log, channel_stats_t *st) {
     fec_config_t fc = fec_config((code_id_t)p->code);
     fc.rs_t = p->rs_t;
     fc.interleave = p->interleave;
@@ -66,7 +92,7 @@ static int process_data(const cli_opts_t *o, noise_t *ch, packet_t *p, uint8_t *
     size_t flips = noise_apply(ch, p->bits, p->nbits, mask);  /* <-- the interference */
     p->has_truth = 1;
     p->truth.flips = (uint16_t)flips;
-    p->truth.profile = (uint8_t)profile_id(o->profile);
+    p->truth.profile = (uint8_t)profile_id(prof);
     p->truth.model = (uint8_t)ch->params.model;
     st->frames++;
     st->bits += p->nbits;
@@ -98,6 +124,16 @@ int main(int argc, char **argv) {
     term_init(o.color);
     install_stop_handler();
 
+    channel_sched_t cs;
+    memset(&cs, 0, sizeof cs);
+    if (o.schedule) {
+        if (schedule_parse(o.schedule, &cs.sched) != 0) {
+            fprintf(stderr, "error: bad --schedule '%s' (example: toll:200,hospital:200)\n", o.schedule);
+            return 2;
+        }
+        cs.active = 1;
+        o.profile = cs.sched.seg[0].profile;
+    }
     noise_params_t np = cli_noise_params(&o);
     noise_t ch;
     noise_init(&ch, &np, rng_derive(o.seed, "channel"));
@@ -112,6 +148,7 @@ int main(int argc, char **argv) {
 
     term_say(TAG, COL, "listening on %s:%d -> tollgate :%d | profile %s | %s",
              o.host, o.channel_port, o.tollgate_port, o.profile->label, desc);
+    if (cs.active) term_say(TAG, COL, "schedule: %s (counted in transmissions)", o.schedule);
 
     channel_stats_t st = {0, 0, 0};
     int got_first = 0;
@@ -125,7 +162,8 @@ int main(int argc, char **argv) {
         }
         got_first = 1;
         if (pkt.type == PKT_END) break;
-        if (process_data(&o, &ch, &pkt, mask, log, &st) == 0) forward(out, &o, &pkt);
+        const profile_t *prof = apply_schedule(&o, &cs, &ch, st.frames);
+        if (process_data(&o, prof, &ch, &pkt, mask, log, &st) == 0) forward(out, &o, &pkt);
     }
     double ber = st.bits ? (double)st.flips / (double)st.bits : 0.0;
     term_say(TAG, COL, "done: %ld frames, %llu bits flipped of %llu (measured BER %.5f, model BER %.5f)",

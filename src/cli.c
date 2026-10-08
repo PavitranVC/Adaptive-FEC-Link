@@ -25,7 +25,7 @@ void cli_defaults(cli_opts_t *o) {
     o->timeout_ms = 100;
     o->max_retries = 4;
     o->window = 32;
-    o->up_threshold = 0.15;
+    o->up_threshold = 0.20;
     o->down_threshold = 0.05;
     o->start_level = 1;
 }
@@ -61,7 +61,7 @@ void cli_usage(FILE *f, const char *prog) {
         "  --max-retries <int>         retransmissions per frame (default 4)\n"
         "  --fb-drop <float>           tollgate drops this fraction of feedback (failure injection)\n"
         "  --window <int>              adaptive: receiver window W in frames (default 32)\n"
-        "  --up-threshold <float>      adaptive: step up if window failure rate > this (0.15)\n"
+        "  --up-threshold <float>      adaptive: step up if window failure rate > this (0.20)\n"
         "  --down-threshold <float>    adaptive: step down if predicted failure < this (0.05)\n"
         "  --start-level <int>         adaptive: start level 0..5 (default 1)\n"
         "  --schedule <spec>           channel: profile schedule, e.g. toll:200,hospital:200\n"

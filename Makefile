@@ -8,6 +8,7 @@
 #   make demo-hospital one-terminal demo, HOSPITAL_IMAGING profile
 #   make demo-arq      one-terminal demo, Stop-and-Wait ARQ (uncoded + CRC, retransmit)
 #   make demo-harq     one-terminal demo, Hybrid ARQ (FEC first, retransmit on CRC fail)
+#   make demo-adaptive adaptive code ladder on a toll -> hospital -> toll channel schedule
 #   make compare       hamming74 vs bch157 on the same seed, side by side
 #   make bench         in-process benchmark sweep -> results/bench.csv
 #   make plots         results/bench.csv -> results/*.png (needs matplotlib)
@@ -43,8 +44,10 @@ SEED    ?= 42
 CODE    ?= hamming74
 CCOUNT  ?= 1000
 FRAMES  ?= 5000
+SCHEDULE ?= toll:2000,hospital:2000,toll:2000
+ASCHED  ?= toll:60,hospital:80,toll:100
 
-.PHONY: all test unit-test integration-test demo demo-hospital demo-arq demo-harq compare bench plots clean
+.PHONY: all test unit-test integration-test demo demo-hospital demo-arq demo-harq demo-adaptive compare bench plots clean
 
 all: $(APPS)
 
@@ -98,6 +101,10 @@ demo-arq: all
 demo-harq: all
 	sh tools/demo.sh --profile toll --strategy harq --code $(CODE) --seed $(SEED) --count $(COUNT) --delay-ms $(DELAY)
 
+demo-adaptive: all
+	sh tools/demo.sh --strategy adaptive --schedule $(ASCHED) --window 16 --seed $(SEED) \
+		--count 240 --delay-ms 40 --rtt-ms 10
+
 compare: all
 	CODES="hamming74 bch157" sh tools/compare.sh --profile toll --seed $(SEED) --count $(CCOUNT)
 
@@ -105,12 +112,14 @@ bench: all
 	@mkdir -p results
 	./bin/bench --profile toll --frames $(FRAMES) --seed $(SEED) --out results/bench.csv
 	./bin/bench --profile hospital --frames $(FRAMES) --seed $(SEED) --out results/bench_hospital.csv
-	./bin/bench --strategies --frames $(FRAMES) --seed $(SEED) --out results/bench_strategy.csv
+	./bin/bench --strategies --schedule $(SCHEDULE) --frames $(FRAMES) --seed $(SEED) \
+		--trace results/adaptive_trace.csv --out results/bench_strategy.csv
 
 plots:
 	$(PYTHON) tools/plot.py results/bench.csv
 	@if [ -f results/bench_hospital.csv ]; then $(PYTHON) tools/plot.py results/bench_hospital.csv --suffix _hospital; fi
 	@if [ -f results/bench_strategy.csv ]; then $(PYTHON) tools/plot.py results/bench_strategy.csv; fi
+	@if [ -f results/adaptive_trace.csv ]; then $(PYTHON) tools/plot.py results/adaptive_trace.csv; fi
 
 clean:
 	rm -rf build bin/vehicle bin/channel bin/tollgate bin/bench results/tmp

@@ -292,8 +292,43 @@ def silent_plot(rows, out, tag):
     return out
 
 
+LADDER = ["L0 uncoded", "L1 Hamming(7,4)", "L2 BCH(15,7)", "L3 BCH(31,16)",
+          "L4 RS(24,16) t=4", "L5 RS(32,16) t=8"]
+
+
 def trace_plot(path, outdir):
-    raise SystemExit("adaptive trace plot: added in week-2 task 3")
+    """Adaptive code level per frame, on top of the channel profile (shaded) + failed frames."""
+    with open(path, newline="") as f:
+        rows = list(csv.DictReader(f))
+    frames = [int(r["frame"]) for r in rows]
+    levels = [int(r["level"]) for r in rows]
+    fig, ax = plt.subplots(figsize=(12, 4.8), facecolor=SURFACE)
+    # shade the channel segments
+    start, seg = 0, rows[0]["segment"]
+    shade = {"TOLL_PLAZA": PALETTE[0], "HOSPITAL_IMAGING": PALETTE[1]}
+    spans = []
+    for i, r in enumerate(rows + [{"segment": None}]):
+        if r["segment"] != seg:
+            spans.append((start, i, seg))
+            start, seg = i, r["segment"]
+    for a, b, name in spans:
+        ax.axvspan(frames[a], frames[b - 1] + 1, color=shade.get(name, MUTED), alpha=0.12, linewidth=0)
+        ax.text((frames[a] + frames[b - 1]) / 2, len(LADDER) - 0.35, name, ha="center", va="top",
+                fontsize=9, color=MUTED)
+    ax.step(frames, levels, where="post", color=TEXT, linewidth=2, label="code level")
+    fails = [int(r["frame"]) for r in rows if r["class"] != "CORRECT"]
+    ax.plot(fails, [-0.35] * len(fails), linestyle="none", marker="|", markersize=10,
+            color=PALETTE[7], label=f"frame not delivered correctly ({len(fails)})")
+    ax.set_yticks(range(len(LADDER)))
+    ax.set_yticklabels(LADDER, fontsize=9)
+    ax.set_ylim(-0.7, len(LADDER) - 0.2)
+    style(ax, "Adaptive FEC: code level follows the interference", "frame", "")
+    ax.legend(frameon=False, fontsize=8, loc="center right", labelcolor=TEXT)
+    fig.tight_layout()
+    out = os.path.join(outdir, "adaptive_level.png")
+    fig.savefig(out, dpi=130)
+    plt.close(fig)
+    return out
 
 
 if __name__ == "__main__":

@@ -17,7 +17,8 @@
  * STRATEGY MODE (week 2):  bin/bench --strategies --frames N --out results/bench_strategy.csv
  *   Compares fec (fixed codes) vs arq vs harq vs adaptive with the link simulator (linksim.h,
  *   simulated clock: RTT, timeout, airtime at 160 kbit/s). Channels: TOLL_PLAZA and
- *   HOSPITAL_IMAGING (profile default models) and, with --schedule, the scheduled channel.
+ *   HOSPITAL_IMAGING (profile default models) and, with --schedule, the scheduled channel
+ *   (channel = "schedule"); --trace FILE writes the adaptive controller's per-frame level there.
  *   CSV: strategy,code,channel,frames,success_rate,silent_wrong_rate,retx_per_frame,
  *        mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes
  */
@@ -25,6 +26,7 @@
 #include <string.h>
 #include "cli.h"
 #include "linksim.h"
+#include "schedule.h"
 #include "sim.h"
 
 static const double BSC_P[] = {0.0005, 0.001, 0.002, 0.005, 0.01, 0.015, 0.02, 0.03, 0.05, 0.07, 0.1};
@@ -96,6 +98,7 @@ static const strat_row_t STRAT_ROWS[] = {
     {"arq", STRAT_ARQ, CODE_NONE},
     {"harq", STRAT_HARQ, CODE_HAMMING74}, {"harq", STRAT_HARQ, CODE_BCH157},
     {"harq", STRAT_HARQ, CODE_BCH3116},
+    {"adaptive", STRAT_ADAPTIVE, CODE_NONE},
 };
 
 static void base_params(const cli_opts_t *o, linksim_params_t *lp) {
@@ -146,6 +149,24 @@ static int run_strategies(const cli_opts_t *o) {
         profile_channel(profs[c], &lp);
         for (size_t i = 0; i < sizeof STRAT_ROWS / sizeof STRAT_ROWS[0]; i++)
             strategy_row(csv, profs[c]->label, &lp, &STRAT_ROWS[i], NULL);
+    }
+    if (o->schedule) {                       /* the scheduled channel: toll -> hospital -> toll */
+        schedule_t sched;
+        if (schedule_parse(o->schedule, &sched) != 0) {
+            fprintf(stderr, "error: bad --schedule '%s'\n", o->schedule);
+            fclose(csv);
+            return 2;
+        }
+        linksim_params_t lp;
+        base_params(o, &lp);
+        schedule_to_linksim(&sched, o->model_set, o->model, o->p, &lp);
+        for (size_t i = 0; i < sizeof STRAT_ROWS / sizeof STRAT_ROWS[0]; i++) {
+            FILE *trace = NULL;
+            if (STRAT_ROWS[i].strategy == STRAT_ADAPTIVE && o->trace_path)
+                trace = fopen(o->trace_path, "w");
+            strategy_row(csv, "schedule", &lp, &STRAT_ROWS[i], trace);
+            if (trace) { fclose(trace); printf("bench: wrote %s\n", o->trace_path); }
+        }
     }
     fclose(csv);
     printf("bench: wrote %s\n", path);

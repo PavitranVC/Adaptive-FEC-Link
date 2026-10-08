@@ -153,3 +153,37 @@ Format: what was chosen / the alternative / why.
   160 kbit/s (a typical RFID tag-to-reader rate), RTT 20 ms, timeout 100 ms. Undelivered
   frames count as failures and are excluded from latency. p99 = nearest-rank percentile. The UDP
   vehicle can only measure "until ACK minus the simulated return trip" (labelled as such).
+
+## Week 2 - task 3: adaptive FEC controller
+
+- 🔀 **Code ladder: L0 none -> L1 Hamming(7,4) -> L2 BCH(15,7) -> L3 BCH(31,16) -> L4 RS t=4 ->
+  L5 RS t=8**, with NO interleaving at the top. Alternative (as specified): "rs plus interleaving
+  at the top level". Why: measured on HOSPITAL_IMAGING (5000 frames): RS t=4 succeeds 83.4%,
+  with bit interleaving d=2/4/8 only 77.4/69.5/59.8% - the bit interleaver spreads a burst over
+  MORE bytes, the opposite of what a byte-symbol code wants. RS t=8 reaches 95.3% (toll 99.96%),
+  dominating every other option. The ladder is one table in `src/adapt.c` if you want it back.
+- 🔀 **Who decides**: the tollgate keeps the sliding window and reports raw window statistics in
+  every ACK/NAK (frames, failures, corrected bits, coded bits); the VEHICLE runs the controller.
+  Alternative: the tollgate decides and sends a level command. Why: the sender owns the code
+  choice, and the receiver stays stateless about strategy (it decodes whatever the header says).
+- 🔀 **Two signals**: step UP on the measured window failure rate f > up_threshold; step DOWN
+  only when f <= down_threshold AND the binomial model predicts the next cheaper code would fail
+  < down_threshold at the measured BER^ = corrected bits / coded bits (successful frames only).
+  Alternative: thresholds on corrected bits per frame alone. Why: corrected-bit counts are not
+  comparable across codes of different length and strength; the prediction makes "is the cheaper
+  code good enough?" an explicit, explainable calculation (shown in the LEVEL DOWN message).
+- 🔀 **Hysteresis**: (1) up 0.20 > down 0.05; (2) one decision per W fresh frames (disjoint
+  windows; the window restarts at each level change); (3) probe back-off: a step down that has to
+  be undone within 2W frames doubles the hold time before the next probe (max 16 windows), a
+  probe that survives resets it. Defaults: --window 32, --up-threshold 0.20, --down-threshold
+  0.05, --start-level 1. The first version evaluated the sliding window on every frame with
+  up 0.15: it flapped L1 <-> L2 14 times in 3000 steady toll frames; now 0 (tested).
+- HARQ is the fallback: a NAK is answered with a retransmission at the CURRENT level (which the
+  same feedback may just have raised). BER^ ignores failed frames (unknown error count), so it
+  under-estimates on bursty channels - the measured failure rate and the probe back-off cover that.
+- 🔀 `--schedule toll:N,hospital:M,...` counts TRANSMISSIONS (air time), not frames; after the last
+  segment the last profile stays. Each segment uses its profile's default model unless --model is
+  given. The Gilbert-Elliott state is redrawn at a switch.
+- Results (`make bench`, schedule toll:2000,hospital:2000,toll:2000, 5000 frames): adaptive
+  99.94% correct, 0.076 retransmissions/frame, p99 33 ms, mean code rate 0.547; best fixed HARQ
+  (BCH(31,16)) 99.40%, 0.198, p99 76 ms; ARQ 81.9%, 1.78, p99 94 ms; best plain FEC (RS) 91.4%.

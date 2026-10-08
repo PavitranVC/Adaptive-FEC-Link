@@ -80,7 +80,7 @@ double adapt_predict_fail(const fec_config_t *cfg, double ber) {
 
 void adapt_defaults(adapt_params_t *p) {
     p->window = 32;
-    p->up_threshold = 0.15;
+    p->up_threshold = 0.20;
     p->down_threshold = 0.05;
     p->start_level = 1;
     p->min_level = 0;
@@ -101,6 +101,7 @@ void adapt_init(adapt_t *a, const adapt_params_t *p) {
 static int move(adapt_t *a, int dir) {
     a->level += dir;
     a->frames_at_level = 0;
+    a->since_eval = 0;
     a->changes++;
     if (dir > 0) a->ups++; else a->downs++;
     return dir;
@@ -109,7 +110,11 @@ static int move(adapt_t *a, int dir) {
 int adapt_update(adapt_t *a, const feedback_t *fb) {
     if (fb->level != a->level) return 0;              /* describes another level: stale */
     a->frames_at_level++;
-    if (fb->win_n < a->p.window) return 0;            /* not enough evidence yet */
+    a->since_eval++;
+    /* decide once per W fresh frames: consecutive decisions look at disjoint windows, so a
+     * single unlucky stretch cannot trigger the same rule W times in a row */
+    if (fb->win_n < a->p.window || a->since_eval < a->p.window) return 0;
+    a->since_eval = 0;
 
     double f = (double)fb->win_fail / fb->win_n;
     double ber = fb->win_bits ? (double)fb->win_corrected / fb->win_bits : 0.0;

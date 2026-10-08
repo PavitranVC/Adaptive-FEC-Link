@@ -57,6 +57,26 @@ the tollgate prints `-> ACK/NAK` after each frame and `seq=5#1` for retransmissi
 Extra flags: `--rtt-ms` (simulated round trip, default 20), `--timeout-ms` (100),
 `--max-retries` (4), `--fb-drop` (0). With `--strategy fec` (default) nothing changes.
 
+### Adaptive FEC (week 2, the highlight)
+
+```sh
+make demo-adaptive             # schedule toll:60,hospital:80,toll:100, 240 frames, ~15 s
+make demo-adaptive ASCHED=toll:100,hospital:150,toll:150 DELAY=60
+```
+
+The channel announces `=== interference changes: HOSPITAL_IMAGING ... ===`; the vehicle prints
+every decision in bold, e.g.
+
+```
+[VEHICLE] *** LEVEL UP   -> L3 BCH(31,16)   (window failure rate 62% > up-threshold 20%) ***
+[VEHICLE] *** LEVEL DOWN -> L4 RS(24,16) t=4   (BER^ 0.0095, predicted failure 2.8% < down-threshold 5%) ***
+```
+
+Flags (give the same ones to all three programs): `--window` (32; the demo uses 16 so it reacts
+within seconds), `--up-threshold` (0.20), `--down-threshold` (0.05), `--start-level` (1),
+`--schedule profile:transmissions,...` (channel). Ladder: L0 uncoded, L1 Hamming(7,4),
+L2 BCH(15,7), L3 BCH(31,16), L4 RS t=4, L5 RS t=8. HARQ retransmits on CRC failure.
+
 ## 2. Three-terminal demo (shows that they really are separate processes)
 
 Use the **same flags** in all three terminals; start them in this order:
@@ -105,7 +125,8 @@ Same seed means the same sequence of tag IDs and the same noise process for ever
 
 ```sh
 make bench                      # results/bench.csv (+ bench_hospital.csv, bench_strategy.csv)
-./bin/bench --strategies --frames 5000 --out results/bench_strategy.csv   # FEC vs ARQ vs HARQ
+./bin/bench --strategies --schedule toll:2000,hospital:2000,toll:2000 --frames 5000 \
+    --trace results/adaptive_trace.csv --out results/bench_strategy.csv  # fec/arq/harq/adaptive
 pip install -r requirements.txt
-make plots                      # results/*.png
+make plots                      # results/*.png incl. strategy_comparison.png, adaptive_level.png
 ```

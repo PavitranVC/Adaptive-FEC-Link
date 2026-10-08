@@ -92,6 +92,8 @@ void linksim_run(const linksim_params_t *p, linksim_result_t *r, FILE *trace) {
         frame_class_t cls = CLASS_DETECTED_FAIL;
         int attempts = 0, level = s.snd.strategy == STRAT_ADAPTIVE ? s.snd.ctl.level : -1;
         long first_tx = s.tx;
+        if (p->level_trace) p->level_trace[f] = level;
+        if (p->segment_trace) p->segment_trace[f] = segment_of(p, first_tx);
 
         for (;;) {
             rx_decode_t d;
