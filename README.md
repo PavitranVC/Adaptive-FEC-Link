@@ -65,6 +65,26 @@ Frame success rate (CORRECT / frames). GE = Gilbert-Elliott with p_gb = 0.005.
 
 Plots: `results/*.png` (`_hospital` suffix for the hospital profile).
 
+## Week 2: retransmissions and adaptive FEC
+
+`--strategy fec|arq|harq|adaptive` (default `fec` = everything above). ACK/NAK feedback flows
+tollgate -> vehicle on UDP 9002. The adaptive controller climbs a code ladder (uncoded ->
+Hamming(7,4) -> BCH(15,7) -> BCH(31,16) -> RS t=4 -> RS t=8) using the receiver's sliding-window
+statistics, with hysteresis, and falls back to HARQ on CRC failure.
+
+On a channel that switches toll -> hospital -> toll (`make bench`, 5000 frames, RTT 20 ms):
+
+| strategy | correct | retransmissions / frame | p99 delivery latency |
+|---|---|---|---|
+| FEC RS t=4 (best fixed FEC) | 91.4% | 0 | 11 ms |
+| Stop-and-Wait ARQ (uncoded) | 81.9% | 1.78 | 94 ms |
+| Hybrid ARQ, BCH(31,16) | 99.4% | 0.20 | 76 ms |
+| **Adaptive** | **99.94%** | **0.08** | **33 ms** |
+
+![adaptive level](results/adaptive_level.png)
+
+Demos: `make demo-arq`, `make demo-harq`, `make demo-adaptive`, `make dashboard` (live web page).
+
 ## Repository
 
 See `CLAUDE.md` for the folder layout and coding rules, `PLAN.md` for the roadmap,
