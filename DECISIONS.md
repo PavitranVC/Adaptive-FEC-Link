@@ -14,3 +14,13 @@ Format: what was chosen / the alternative / why.
 - Bits are kept one-per-byte inside the coding layer (clarity over speed); packed only on the wire.
 - Tiny home-made test helper (`tests/testlib.h`) instead of a framework - no external C libraries.
 - `.gitignore` lists `bin/` literally (as required); `bin/.gitkeep` is force-added once.
+
+## Phase 1
+
+- CRC-32 is the standard IEEE 802.3 / zip CRC (reflected 0xEDB88320, init/xorout 0xFFFFFFFF),
+  computed bitwise (no table) so the division can be explained line by line. It covers the
+  12 ID bytes only; the 4 CRC bytes are appended big-endian -> 128-bit payload.
+- Hamming(7,4) and Hamming(15,11) share one generic implementation, parameterised by r
+  (n = 2^r - 1), with the textbook layout (parity at power-of-two positions, syndrome = error position).
+- Block decoders return the number of corrected bits (>= 0) or a negative value when they
+  *detect* an uncorrectable pattern (SECDED double error; later BCH/RS decoding failure).

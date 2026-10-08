@@ -20,7 +20,7 @@ static int tl_checks = 0;
     do {                                            \
         int before_ = tl_failures;                  \
         name();                                     \
-        printf("  %-48s %s\n", #name,               \
+        printf("  %-56s %s\n", #name,               \
                tl_failures == before_ ? "ok" : "FAILED"); \
     } while (0)
 

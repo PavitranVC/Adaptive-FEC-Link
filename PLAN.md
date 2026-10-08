@@ -7,7 +7,7 @@ outputs -> commit `phaseN: <summary>` -> push.
 
 - [x] **Phase 0 - Scaffolding**: CLAUDE.md, README.md, PLAN.md, PROGRESS.md, DECISIONS.md,
       Makefile, .gitignore, requirements.txt, folder layout, test helper.
-- [ ] **Phase 1 - Bit utilities, CRC-32, Hamming(7,4), Hamming(15,11), SECDED(8,4)**.
+- [x] **Phase 1 - Bit utilities, CRC-32, Hamming(7,4), Hamming(15,11), SECDED(8,4)**.
       Tests: every single-bit error at every position corrected; 2-bit error makes plain Hamming
       miscorrect and CRC-32 catches it; SECDED detects 2-bit errors.
 - [ ] **Phase 2 - Channel noise models**: BSC(p), Gilbert-Elliott (p_gb, p_bg, e_good, e_bad),
