@@ -19,16 +19,15 @@ Every code, the CRC-32, the RNG and the Galois-field arithmetic are implemented 
 ## Quick start
 
 ```sh
-make            # builds bin/vehicle bin/channel bin/tollgate bin/bench
-make test       # unit tests + integration test
-make demo       # one-terminal live demo (toll plaza profile)
-make demo-hospital
-make compare    # hamming74 vs bch157, same seed, side-by-side summary
-make bench      # results/bench.csv
-pip install -r requirements.txt && make plots   # results/*.png
+make                 # build bin/vehicle bin/channel bin/tollgate bin/bench
+make test            # unit tests + integration test
+make demo            # one-terminal live demo (toll plaza profile)
+make demo-adaptive   # adaptive FEC on a toll -> hospital -> toll channel
+make dashboard       # live web dashboard at http://127.0.0.1:8050/
 ```
 
-Three-terminal demo and all flags: see [`docs/DEMO.md`](docs/DEMO.md).
+Setup per OS (WSL / Ubuntu / macOS), every demo, plots, troubleshooting and the presentation
+script: **[`docs/DEMO.md`](docs/DEMO.md)**.
 
 ## Architecture
 

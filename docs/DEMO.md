@@ -1,7 +1,69 @@
 # Demo guide
 
-All commands are run from the repository root after `make`.
-Works on Ubuntu, WSL and macOS (only `cc`/`gcc`/`clang`, `make`, `sh`, `python3` needed).
+This is the single guide for setting up, running and presenting the project.
+Sections 0.x are one-time setup; sections 1-5 are the demos; then troubleshooting and a
+2-minute talking script.
+
+## 0.1 One-time setup (per laptop)
+
+**Windows (via WSL)** - in an *administrator* PowerShell:
+
+```powershell
+wsl --install
+```
+
+Restart the PC, open **Ubuntu** from the Start menu (create a user when asked), then in Ubuntu:
+
+```sh
+sudo apt update && sudo apt install -y build-essential git python3 python3-pip python3-venv
+```
+
+**Ubuntu / Debian** - the same line:
+
+```sh
+sudo apt update && sudo apt install -y build-essential git python3 python3-pip python3-venv
+```
+
+**macOS** - install the command-line tools (gives `clang` as `gcc`/`cc`, `make` and `git`):
+
+```sh
+xcode-select --install
+python3 --version      # if missing, install Python 3 from https://www.python.org/downloads/
+```
+
+## 0.2 Clone
+
+```sh
+git clone https://github.com/PavitranVC/Adaptive-FEC-Link.git
+cd Adaptive-FEC-Link          # main is the default branch
+```
+
+## 0.3 Build and test
+
+```sh
+make            # builds bin/vehicle bin/channel bin/tollgate bin/bench (a few seconds)
+make test       # unit tests + integration test; ends with "Integration test passed."
+```
+
+## 0.4 Python environment (only for plots and the dashboard)
+
+The C programs need no Python. `make plots` needs matplotlib; the dashboard needs only python3.
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate          # run this again in every new terminal
+pip install -r requirements.txt
+```
+
+Open the results folder (plots are `results/*.png`):
+
+| system | command |
+|---|---|
+| WSL     | `explorer.exe results` |
+| macOS   | `open results` |
+| Linux   | `xdg-open results` |
+
+All commands below are run from the repository root after `make`.
 
 ## 1. One-terminal demo (recommended for presenting)
 
@@ -146,3 +208,31 @@ make bench                      # results/bench.csv (+ bench_hospital.csv, bench
 pip install -r requirements.txt
 make plots                      # results/*.png incl. strategy_comparison.png, adaptive_level.png
 ```
+
+## 6. Troubleshooting
+
+| symptom | fix |
+|---|---|
+| `make: command not found` / `gcc: not found` / `cc: not found` | redo section 0.1 (`build-essential` on Ubuntu/WSL, `xcode-select --install` on macOS) |
+| `cannot bind UDP 127.0.0.1:9000: Address already in use` | an old run is still alive. List it: `pgrep -fl "bin/(vehicle|channel|tollgate)"`, stop it by PID: `kill <pid>` (only those PIDs - do not `kill -9` things you do not recognise). Or use other ports: add `--channel-port 9100 --tollgate-port 9101 --feedback-port 9102` to all three programs |
+| three-terminal demo: nothing arrives at the tollgate | start order matters: **tollgate first, then channel, then vehicle**; all three need the same port flags |
+| garbled characters like `^[[32m` | the terminal does not support colours: add `--no-color` (e.g. `sh tools/demo.sh --no-color ...`) |
+| `matplotlib is missing` from `make plots` | activate the venv (`source .venv/bin/activate`) and `pip install -r requirements.txt` |
+| dashboard: `Address already in use` on 8050 | `PORT=8080 make dashboard` (then open `http://127.0.0.1:8080/`) |
+| a test fails right before the presentation | do **not** fix code live. Demo the parts that pass (`make demo`, `make compare`, the plots in `results/` are committed) and mention the failing test honestly |
+
+## 7. Two-minute talking script
+
+Each line: what to say, and what to run or show while saying it. Numbers come from
+`results/bench.csv`, `results/bench_hospital.csv` and `results/bench_strategy.csv` (`make bench`).
+
+| # | say | run / show |
+|---|---|---|
+| 1 | "A car's RFID tag ID must reach the toll gantry in one pass. Near trucks - or near MRI and electrosurgery equipment in a hospital - the radio link gets bursts of bit errors. Retransmitting costs time the car does not have, so we correct errors in place." | README architecture diagram |
+| 2 | "Hamming(7,4) fixes any single error per block, but two errors in a block make it 'correct' the wrong bit - silently." | `make demo` - point at a magenta `M` in the bit map, if one shows up |
+| 3 | "That is why every ID carries a CRC-32: a mis-corrected frame is always rejected. In about 155,000 test frames per code, SILENT_WRONG never happened once." | `results/silent_wrong.png` |
+| 4 | "BCH codes fix several errors per block. Same seed, same noise: Hamming 93.1% correct, BCH(15,7) 99.2%." | `make compare` |
+| 5 | "In the hospital profile errors come in bursts. Reed-Solomon works on bytes, so a 16-bit burst touches at most 3 bytes - a few symbol errors it fixes easily. RS(24,16) gets 83% on the hospital channel with no interleaver at code rate 0.67; Hamming+interleaver gets 61%, BCH(31,16)+interleaver ties RS at 84% but needs more parity (rate 0.52) - and for very long 32-bit bursts the interleaved BCH is actually better." | `make demo-hospital CODE=rs`, `results/success_vs_burst_len_hospital.png` |
+| 6 | "Classic retransmission (ARQ) needs 1.8 extra transmissions per frame and a 94 ms worst case; FEC plus retransmit-on-failure (HARQ) cuts both." | `make demo-arq`, then `make demo-harq`; `results/strategy_comparison.png` |
+| 7 | "Our adaptive controller watches the receiver's error statistics and climbs the code ladder when the hospital interference starts, then steps back down when it ends." | `make demo-adaptive` (point at `LEVEL UP` / `LEVEL DOWN`), or `make dashboard` |
+| 8 | "Headline: on a channel that switches toll -> hospital -> toll, adaptive delivers 99.94% of IDs with 0.08 retransmissions per frame and a 33 ms worst case." | `results/adaptive_level.png` |
