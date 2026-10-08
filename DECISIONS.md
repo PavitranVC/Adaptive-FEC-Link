@@ -98,3 +98,20 @@ Format: what was chosen / the alternative / why.
   failed frame). Zero counts are drawn as an upper bound (< 1/N).
 - Plot colours: fixed colour per code from a CVD-validated categorical palette, so a code keeps
   its colour across all charts.
+
+## Phase 6
+
+- 🔀 Reed-Solomon uses the **whole 128-bit payload as one shortened codeword**: RS(16+2t, 16)
+  over GF(256) (default t = 4 -> RS(24,16), rate 0.667), p(x) = x^8+x^4+x^3+x^2+1, roots
+  alpha^1..alpha^2t. Alternative: several smaller RS codewords per frame with symbol
+  interleaving. Why: simplest to explain, highest rate, and a single codeword already corrects
+  every bit burst <= 8(t-1)+1 = 25 bits (tested exhaustively for every position).
+- RS reuses the BCH Berlekamp-Massey routine (`bch_berlekamp_massey`, limit raised to t = 16) and
+  adds Forney's formula for the error values. `--rs-t 1..16` travels in the packet header.
+- 🔀 The interleaver is a generic **bit-level block interleaver** applied to the whole coded frame
+  of ANY code (`--interleave D`, header field): rows written, columns sent. Alternative: symbol
+  interleaver only for RS. Why: it is what rescues the bit-oriented codes (Hamming/BCH) in the
+  hospital profile; RS does not need it (it would even spread a burst over more bytes).
+  The "each block sees at most one burst error" guarantee holds when D divides the coded length.
+- The benchmark adds interleaved variants `hamming74+il8` and `bch3116+il8` (drawn dashed in the
+  base code's colour) and RS (`rs`, or `rs_t<N>` with `--rs-t N`).

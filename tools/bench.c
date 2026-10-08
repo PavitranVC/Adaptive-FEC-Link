@@ -10,6 +10,8 @@
  *   bsc   : flip probability p
  *   ge    : p_gb (probability per bit that a burst starts); p_bg, e_good, e_bad from --profile
  *   burst : burst length L in bits, one burst in EVERY frame (density from --profile)
+ * Besides every registered code (RS with --rs-t, default 4) it also benchmarks interleaved
+ * variants "hamming74+il<D>" and "bch3116+il<D>" (D = --interleave if > 1, else 8).
  * Optional filters: --code X, --model Y. Usage: bin/bench --profile toll --frames 5000 --out f.csv
  */
 #include <stdio.h>
@@ -29,19 +31,22 @@ static noise_params_t point_params(const profile_t *prof, noise_model_t m, doubl
     return np;
 }
 
-static void run_point(FILE *csv, const cli_opts_t *o, code_id_t code, noise_model_t m,
+typedef struct {
+    char name[32];
+    fec_config_t cfg;
+} variant_t;
+
+static void run_point(FILE *csv, const cli_opts_t *o, const variant_t *v, noise_model_t m,
                       double param) {
-    fec_config_t fc = cli_fec_config(o);
-    fc.code = code;
     noise_params_t np = point_params(o->profile, m, param);
     sim_result_t r;
-    sim_run(&fc, &np, o->frames, o->seed, &r);
+    sim_run(&v->cfg, &np, o->frames, o->seed, &r);
     double n = (double)r.frames;
-    fprintf(csv, "%s,%s,%g,%ld,%.6f,%.6f,%.6f,%.4f,%.3f\n", fec_code_name(code),
+    fprintf(csv, "%s,%s,%g,%ld,%.6f,%.6f,%.6f,%.4f,%.3f\n", v->name,
             noise_model_name(m), param, r.frames, r.correct / n, r.detected_fail / n,
             r.silent_wrong / n, r.code_rate, r.mean_decode_us);
-    printf("  %-11s %-5s param=%-7g success=%6.4f detected=%6.4f silent=%6.4f rate=%.3f %6.2fus\n",
-           fec_code_name(code), noise_model_name(m), param, r.correct / n, r.detected_fail / n,
+    printf("  %-14s %-5s param=%-7g success=%6.4f detected=%6.4f silent=%6.4f rate=%.3f %6.2fus\n",
+           v->name, noise_model_name(m), param, r.correct / n, r.detected_fail / n,
            r.silent_wrong / n, r.code_rate, r.mean_decode_us);
 }
 
@@ -49,6 +54,28 @@ static int has_flag(int argc, char **argv, const char *flag) {
     for (int i = 1; i < argc; i++)
         if (!strncmp(argv[i], flag, strlen(flag))) return 1;
     return 0;
+}
+
+static int build_variants(const cli_opts_t *o, int only_code, variant_t *vs) {
+    int nv = 0, depth = o->interleave > 1 ? o->interleave : 8;
+    for (int ci = 0; ci < fec_code_count(); ci++) {
+        code_id_t code = fec_code_at(ci)->id;
+        if (only_code && code != o->code) continue;
+        vs[nv].cfg = fec_config(code);
+        vs[nv].cfg.rs_t = o->rs_t;
+        if (code == CODE_RS && o->rs_t != 4)
+            snprintf(vs[nv].name, sizeof vs[nv].name, "rs_t%d", o->rs_t);
+        else
+            snprintf(vs[nv].name, sizeof vs[nv].name, "%s", fec_code_name(code));
+        nv++;
+        if (code == CODE_HAMMING74 || code == CODE_BCH3116) {   /* interleaved variant */
+            vs[nv] = vs[nv - 1];
+            vs[nv].cfg.interleave = depth;
+            snprintf(vs[nv].name, sizeof vs[nv].name, "%s+il%d", fec_code_name(code), depth);
+            nv++;
+        }
+    }
+    return nv;
 }
 
 int main(int argc, char **argv) {
@@ -65,14 +92,14 @@ int main(int argc, char **argv) {
     printf("bench: profile %s, %ld frames per point, seed %llu -> %s\n", o.profile->label,
            o.frames, (unsigned long long)o.seed, path);
 
-    for (int ci = 0; ci < fec_code_count(); ci++) {
-        code_id_t code = fec_code_at(ci)->id;
-        if (only_code && code != o.code) continue;
+    variant_t vs[16];
+    int nv = build_variants(&o, only_code, vs);
+    for (int vi = 0; vi < nv; vi++) {
         for (int m = NOISE_BSC; m <= NOISE_BURST; m++) {
             if (only_model && (noise_model_t)m != o.model) continue;
             const double *ps = m == NOISE_BSC ? BSC_P : m == NOISE_GE ? GE_PGB : BURST_L;
             int np = m == NOISE_BSC ? COUNT(BSC_P) : m == NOISE_GE ? COUNT(GE_PGB) : COUNT(BURST_L);
-            for (int i = 0; i < np; i++) run_point(csv, &o, code, (noise_model_t)m, ps[i]);
+            for (int i = 0; i < np; i++) run_point(csv, &o, &vs[vi], (noise_model_t)m, ps[i]);
         }
     }
     fclose(csv);

@@ -28,7 +28,7 @@
 #include "gf.h"
 
 #define BCH_MAX_N 63
-#define BCH_MAX_T 8
+#define BCH_MAX_T 16  /* also bounds Berlekamp-Massey, which Reed-Solomon reuses */
 
 typedef struct {
     gf_t gf;

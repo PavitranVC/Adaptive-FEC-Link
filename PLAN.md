@@ -22,7 +22,7 @@ outputs -> commit `phaseN: <summary>` -> push.
 - [x] **Phase 5 - Benchmark**: bin/bench (in-process) sweeping code x model x parameter ->
       results/bench.csv (code, model, param, frames, frame_success_rate, detected_fail_rate,
       silent_wrong_rate, code_rate, mean_decode_us); tools/plot.py -> results/*.png.
-- [ ] **Phase 6 - (if time) Reed-Solomon** over GF(256), shortened, configurable t (default 4),
+- [x] **Phase 6 - (if time) Reed-Solomon** over GF(256), shortened, configurable t (default 4),
       configurable block interleaver, burst-correction tests, pipeline + benchmark.
 
 ## Week 2 (do NOT build yet)

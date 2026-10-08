@@ -32,7 +32,7 @@ MARKERS = {"none": "o", "hamming74": "s", "hamming1511": "D", "secded84": "^",
            "bch157": "v", "bch3116": "P", "rs": "X"}
 LABELS = {"none": "uncoded", "hamming74": "Hamming(7,4)", "hamming1511": "Hamming(15,11)",
           "secded84": "SECDED(8,4)", "bch157": "BCH(15,7)", "bch3116": "BCH(31,16)",
-          "rs": "Reed-Solomon"}
+          "rs": "RS(24,16) t=4"}
 TEXT, MUTED, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 
 
@@ -48,9 +48,27 @@ def load(path):
     return rows
 
 
+def base_code(code):
+    """'hamming74+il8' -> ('hamming74', 8); plain codes -> (code, 1)."""
+    if "+il" in code:
+        b, d = code.split("+il", 1)
+        return b, int(d)
+    return code, 1
+
+
 def codes_in(rows):
     present = {r["code"] for r in rows}
-    return [c for c in CODE_ORDER if c in present] + sorted(present - set(CODE_ORDER))
+    order = {c: i for i, c in enumerate(CODE_ORDER)}
+    return sorted(present, key=lambda c: (order.get(base_code(c)[0], 99), base_code(c)[1], c))
+
+
+def color_of(code):
+    return COLORS.get(base_code(code)[0], MUTED)
+
+
+def pretty(code):
+    b, d = base_code(code)
+    return LABELS.get(b, b) + (f" + interleaver d={d}" if d > 1 else "")
 
 
 def style(ax, title, xlabel, ylabel):
@@ -67,27 +85,34 @@ def style(ax, title, xlabel, ylabel):
     ax.tick_params(colors=MUTED)
 
 
+def short(code):
+    b, d = base_code(code)
+    return LABELS.get(b, b) + (f"\n+ il d={d}" if d > 1 else "")
+
+
 def label_of(code, rows):
     rate = next(r["code_rate"] for r in rows if r["code"] == code)
-    return f"{LABELS.get(code, code)}  (rate {rate:.2f})"
+    return f"{pretty(code)}  (rate {rate:.2f})"
 
 
 def sweep_plot(rows, model, xlabel, title, out, logx):
     sel = [r for r in rows if r["model"] == model]
     if not sel:
         return None
-    fig, ax = plt.subplots(figsize=(8, 5), facecolor=SURFACE)
+    fig, ax = plt.subplots(figsize=(12, 5.5), facecolor=SURFACE)
     for code in codes_in(sel):
         pts = sorted((r["param"], r["frame_success_rate"]) for r in sel if r["code"] == code)
-        ax.plot([p for p, _ in pts], [s for _, s in pts], color=COLORS.get(code, MUTED),
-                marker=MARKERS.get(code, "o"), markersize=6, linewidth=2,
+        dashed = base_code(code)[1] > 1   # interleaved variant: same colour, dashed line
+        ax.plot([p for p, _ in pts], [s for _, s in pts], color=color_of(code),
+                marker=MARKERS.get(base_code(code)[0], "o"), markersize=6, linewidth=2,
+                linestyle="--" if dashed else "-", markerfacecolor=SURFACE if dashed else None,
                 label=label_of(code, sel))
     if logx:
         ax.set_xscale("log")
     ax.set_ylim(-0.02, 1.02)
     style(ax, title[: title.index(" [")], xlabel + "\n" + title[title.index(" [") + 2:-1],
           "frame success rate (CORRECT / frames)")
-    ax.legend(frameon=False, fontsize=9, labelcolor=TEXT)
+    ax.legend(frameon=False, fontsize=9, labelcolor=TEXT, loc="upper left", bbox_to_anchor=(1.01, 1.0))
     fig.tight_layout()
     fig.savefig(out, dpi=130)
     plt.close(fig)
@@ -97,17 +122,18 @@ def sweep_plot(rows, model, xlabel, title, out, logx):
 def bar_plot(rows, values, title, ylabel, out, fmt):
     codes = codes_in(rows)
     vals = [values(code) for code in codes]
-    fig, ax = plt.subplots(figsize=(8, 4.5), facecolor=SURFACE)
-    bars = ax.bar([LABELS.get(c, c) for c in codes], vals,
-                  color=[COLORS.get(c, MUTED) for c in codes], width=0.6,
-                  edgecolor=SURFACE, linewidth=2)
+    fig, ax = plt.subplots(figsize=(10, 5), facecolor=SURFACE)
+    bars = ax.bar([short(c) for c in codes], vals,
+                  color=[color_of(c) for c in codes], width=0.6,
+                  edgecolor=SURFACE, linewidth=2,
+                  hatch=["//" if base_code(c)[1] > 1 else "" for c in codes])
     for b, v in zip(bars, vals):
         ax.annotate(fmt(v), (b.get_x() + b.get_width() / 2, b.get_height()),
                     ha="center", va="bottom", fontsize=9, color=TEXT,
                     xytext=(0, 3), textcoords="offset points")
     style(ax, title, "", ylabel)
     ax.set_ylim(0, max(vals) * 1.15 if vals and max(vals) > 0 else 1)
-    ax.tick_params(axis="x", labelrotation=20)
+    ax.tick_params(axis="x", labelsize=8)
     fig.tight_layout()
     fig.savefig(out, dpi=130)
     plt.close(fig)
@@ -158,11 +184,11 @@ def silent_plot(rows, out, tag):
         caught[r["code"]] += r["detected_fail_rate"] * r["frames"]
         silent[r["code"]] += r["silent_wrong_rate"] * r["frames"]
         frames[r["code"]] += r["frames"]
-    fig, ax = plt.subplots(figsize=(9, 5.6), facecolor=SURFACE)
+    fig, ax = plt.subplots(figsize=(11, 6), facecolor=SURFACE)
     x = list(range(len(codes)))
     w = 0.38
     cr = [caught[c] / frames[c] for c in codes]
-    ax.bar([i - w / 2 for i in x], cr, width=w, color=[COLORS.get(c, MUTED) for c in codes],
+    ax.bar([i - w / 2 for i in x], cr, width=w, color=[color_of(c) for c in codes],
            edgecolor=SURFACE, linewidth=2, label="DETECTED_FAIL (caught by CRC-32)")
     floor = min(1.0 / frames[c] for c in codes)
     for i, c in enumerate(codes):
@@ -183,7 +209,7 @@ def silent_plot(rows, out, tag):
     ax.set_yscale("log")
     ax.set_ylim(floor / 3, 2.0)
     ax.set_xticks(x)
-    ax.set_xticklabels([LABELS.get(c, c) for c in codes], rotation=15)
+    ax.set_xticklabels([short(c) for c in codes], rotation=25, ha="right")
     style(ax, "Failures caught by CRC vs silent errors (all sweep points pooled)",
           tag.strip(" []"), "fraction of frames (log scale)")
     ax.legend(frameon=False, fontsize=8, labelcolor=TEXT, loc="upper center",

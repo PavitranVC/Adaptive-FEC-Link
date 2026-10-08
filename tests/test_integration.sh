@@ -51,6 +51,16 @@ check "bch3116 run ok" [ $? -eq 0 ]
 check "bch3116 received 30" [ "$(val received)" = 30 ]
 check "bch3116 code reported" [ "$(val code)" = bch3116 ]
 
+echo "== integration: Reed-Solomon t=6 + interleaver header fields travel end to end"
+sh tools/demo.sh $PORTS --no-color --profile hospital --code rs --rs-t 6 --seed 4 --count 30 \
+    --delay-ms 0 --idle-timeout-ms 3000 >"$OUT" 2>&1
+check "rs run ok" [ $? -eq 0 ]
+check "rs received 30" [ "$(val received)" = 30 ]
+check "rs t=6 -> 28 bytes = 224 coded bits" [ "$(val coded_bits)" = 224 ]
+sh tools/demo.sh $PORTS --no-color --profile toll --code hamming74 --interleave 8 --model burst \
+    --burst-len 8 --p 1 --seed 4 --count 30 --delay-ms 0 --idle-timeout-ms 3000 >"$OUT" 2>&1
+check "interleaved hamming74 fixes every 8-bit burst" [ "$(val correct)" = 30 ]
+
 echo "== integration: compare script (default codes hamming74 vs bch157)"
 sh tools/compare.sh $PORTS --seed 3 --count 50 >"$OUT" 2>&1
 check "compare ok" [ $? -eq 0 ]
