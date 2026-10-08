@@ -59,7 +59,7 @@ Frame success rate (CORRECT / frames). GE = Gilbert-Elliott with p_gb = 0.005.
 * Toll plaza (random errors): BCH(31,16) is best; Hamming(7,4) is a cheap, fast fallback.
 * Hospital (bursts): bit-level codes collapse; Reed-Solomon (byte symbols) or an interleaver
   restores them. RS does it at the highest code rate.
-* SILENT_WRONG was **0 in every run** (~2 x 10^5 frames per code): CRC-32 catches every
+* SILENT_WRONG was **0 in every run** (155,000 frames per code and profile): CRC-32 catches every
   miscorrection, so FEC failures cost a re-read, never a wrong bill.
 * Decode latency is 2-8 microseconds per frame for every code (`results/latency.png`).
 
