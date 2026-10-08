@@ -57,6 +57,19 @@ check "compare ok" [ $? -eq 0 ]
 check "compare shows both codes" grep -q 'hamming74.*bch157' "$OUT"
 check "compare shows silent_wrong row" grep -q '^silent_wrong' "$OUT"
 
+echo "== integration: bench smoke test"
+./bin/bench --profile toll --frames 50 --code hamming74 --out results/tmp/bench_smoke.csv >"$OUT" 2>&1
+check "bench ok" [ $? -eq 0 ]
+check "bench csv header" grep -q '^code,model,param,frames,frame_success_rate,detected_fail_rate,silent_wrong_rate,code_rate,mean_decode_us$' results/tmp/bench_smoke.csv
+rows=$(grep -c '^hamming74,' results/tmp/bench_smoke.csv)
+check "bench csv has rows for all 3 models" [ "$rows" -ge 3 ] && grep -q ',burst,' results/tmp/bench_smoke.csv
+if command -v python3 >/dev/null 2>&1 && python3 -c "import matplotlib" 2>/dev/null; then
+    python3 tools/plot.py results/tmp/bench_smoke.csv --outdir results/tmp >"$OUT" 2>&1
+    check "plot.py runs" [ $? -eq 0 ]
+else
+    echo "  plot.py skipped (matplotlib not installed)"
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo "Integration test FAILED - last output:"
     cat "$OUT"

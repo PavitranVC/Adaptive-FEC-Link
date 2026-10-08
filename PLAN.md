@@ -19,7 +19,7 @@ outputs -> commit `phaseN: <summary>` -> push.
 - [x] **Phase 4 - Binary BCH**: BCH(15,7) t=2 and BCH(31,16) t=3, GF(2^m), syndromes,
       Berlekamp-Massey, Chien search. Exhaustive tests (weight <= t) for BCH(15,7), randomized
       for BCH(31,16). Wired into the pipeline.
-- [ ] **Phase 5 - Benchmark**: bin/bench (in-process) sweeping code x model x parameter ->
+- [x] **Phase 5 - Benchmark**: bin/bench (in-process) sweeping code x model x parameter ->
       results/bench.csv (code, model, param, frames, frame_success_rate, detected_fail_rate,
       silent_wrong_rate, code_rate, mean_decode_us); tools/plot.py -> results/*.png.
 - [ ] **Phase 6 - (if time) Reed-Solomon** over GF(256), shortened, configurable t (default 4),

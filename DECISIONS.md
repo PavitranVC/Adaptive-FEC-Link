@@ -81,3 +81,20 @@ Format: what was chosen / the alternative / why.
   differs from deg Lambda (it never outputs a non-codeword; tested exhaustively for weight 3).
 - Syndromes and Chien search use the straightforward O(n * t) evaluation (no Horner/LFSR tricks)
   so the maths stays visible; latency is still only a few microseconds per frame.
+
+## Phase 5
+
+- The simulation loop lives in the library (`src/sim.c`, unit-tested); `bin/bench` only sweeps
+  and writes CSV. Same seed for every point -> every code sees the same tags and noise process.
+- 🔀 Swept parameter per model (CSV `param` column): bsc -> p in [0.0005, 0.1]; ge -> p_gb in
+  [0.0005, 0.05] with the profile's p_bg/e_good/e_bad; burst -> burst length L in [1, 32] with a
+  burst in *every* frame. Alternative: sweep the average BER for all models. Why: keeps each
+  model's physical knob and shows the burst-length "cliff" of each code directly.
+- `make bench` writes `results/bench.csv` (toll profile, exactly the required columns) and
+  `results/bench_hospital.csv` (same sweep, hospital GE/burst parameters); `make plots` makes
+  PNGs for both (suffix `_hospital`). PNGs are tracked as final plots, CSVs are ignored.
+- The silent-wrong plot contrasts CRC-caught failures with silent errors on a log scale, because
+  silent-wrong is 0 in all ~155k frames per code: CRC-32 makes it negligible (~2^-32 per
+  failed frame). Zero counts are drawn as an upper bound (< 1/N).
+- Plot colours: fixed colour per code from a CVD-validated categorical palette, so a code keeps
+  its colour across all charts.
