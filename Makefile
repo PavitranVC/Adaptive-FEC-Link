@@ -38,6 +38,8 @@ TEST_BINS := $(patsubst tests/%.c,build/tests/%,$(TEST_SRCS))
 COUNT   ?= 20
 DELAY   ?= 250
 SEED    ?= 42
+CODE    ?= hamming74
+CCOUNT  ?= 1000
 FRAMES  ?= 5000
 
 .PHONY: all test unit-test integration-test demo demo-hospital compare bench plots clean
@@ -83,13 +85,13 @@ integration-test: all
 	@if [ -f tests/test_integration.sh ]; then sh tests/test_integration.sh; fi
 
 demo: all
-	sh tools/demo.sh --profile toll --seed $(SEED) --count $(COUNT) --delay-ms $(DELAY)
+	sh tools/demo.sh --profile toll --code $(CODE) --seed $(SEED) --count $(COUNT) --delay-ms $(DELAY)
 
 demo-hospital: all
-	sh tools/demo.sh --profile hospital --seed $(SEED) --count $(COUNT) --delay-ms $(DELAY)
+	sh tools/demo.sh --profile hospital --code $(CODE) --seed $(SEED) --count $(COUNT) --delay-ms $(DELAY)
 
 compare: all
-	sh tools/compare.sh $(SEED)
+	CODES="hamming74 bch157" sh tools/compare.sh --profile toll --seed $(SEED) --count $(CCOUNT)
 
 bench: all
 	@mkdir -p results

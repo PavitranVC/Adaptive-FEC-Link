@@ -46,3 +46,27 @@ Format: what was chosen / the alternative / why.
   TOLL_PLAZA BSC p=0.01, GE (0.002, 0.5, 0.005, 0.5) ~BER 0.007, burst L=4 in 20% of frames;
   HOSPITAL_IMAGING BSC p=0.02, GE (0.005, 0.08, 0.002, 0.5) ~BER 0.031 with 12.5-bit mean
   bursts, burst L=16 in 50% of frames. Default model: toll -> bsc, hospital -> ge.
+
+## Phase 3
+
+- 🔀 Ground truth travels as an **evaluation-only sidecar** that the channel appends to each
+  packet (clean codeword, true tag ID, number of flipped bits, profile, model). The channel gets
+  the true ID by decoding the *clean* codeword. Alternative: a separate truth log file joined
+  offline by seq. Why: live classification in the tollgate during the demo, no file races; the
+  tollgate's decoder never reads the sidecar (only `frame_classify` does).
+- 🔀 A frame is DETECTED_FAIL if the CRC fails **or** a block decoder detected an uncorrectable
+  pattern (SECDED double error, later BCH/RS failure), even if the CRC happens to pass.
+  Alternative: CRC only. Why: a real receiver would also reject a frame its decoder flagged.
+- 🔀 Payload is coded as consecutive k-bit chunks (last one zero-padded); `code_rate` is the
+  *effective* rate 128 / coded bits (includes padding), e.g. Hamming(15,11) -> 128/180 = 0.711.
+- Extra code `none` (uncoded baseline) is accepted besides the six required codes.
+- All three programs accept every flag (irrelevant ones ignored), so the same command line
+  works for all of them. Ports are named by link: `--channel-port` (9000), `--tollgate-port`
+  (9001), `--feedback-port` (9002, reserved).
+- Shutdown: vehicle sends END (twice) carrying the number of frames sent; the channel forwards it
+  (twice); the tollgate prints the summary (lost = sent - received). Backstops: Ctrl-C (summary
+  still printed) and `--idle-timeout-ms` (default 10 s, counted only after the first packet so
+  the three-terminal demo can be started slowly).
+- With `--delay-ms 0` the vehicle still sleeps 100 us between frames so loopback socket buffers
+  never overflow (lost frames would distort the statistics).
+- Decode latency = FEC decode + CRC check of one frame, measured with CLOCK_MONOTONIC.

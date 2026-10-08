@@ -13,7 +13,7 @@ outputs -> commit `phaseN: <summary>` -> push.
 - [x] **Phase 2 - Channel noise models**: BSC(p), Gilbert-Elliott (p_gb, p_bg, e_good, e_bad),
       fixed burst of length L at random position. TOLL_PLAZA / HOSPITAL_IMAGING presets in one header.
       Tests: measured flip rates / burst lengths statistically close to parameters.
-- [ ] **Phase 3 - UDP pipeline**: bin/vehicle, bin/channel, bin/tollgate with CLI flags; per-frame
+- [x] **Phase 3 - UDP pipeline**: bin/vehicle, bin/channel, bin/tollgate with CLI flags; per-frame
       receiver log (seq, code, flipped, corrected, CRC, class, decode latency us); coloured output
       (--no-color); --delay-ms; make demo / demo-hospital / compare; integration test; docs/DEMO.md.
 - [ ] **Phase 4 - Binary BCH**: BCH(15,7) t=2 and BCH(31,16) t=3, GF(2^m), syndromes,

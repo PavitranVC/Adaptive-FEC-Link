@@ -39,6 +39,10 @@ extern const profile_t PROFILE_HOSPITAL_IMAGING;
 /* "toll" or "hospital" (also accepts the labels); NULL if unknown. */
 const profile_t *profile_by_name(const char *name);
 
+/* Small integer ids for the wire format: 0 = toll, 1 = hospital. */
+int profile_id(const profile_t *prof);
+const profile_t *profile_by_id(int id); /* NULL if unknown */
+
 /* Noise parameters of `model` from the profile. If p_override >= 0 it replaces the model's
  * main knob:  BSC -> p,  GE -> p_gb (how often bursts start),  BURST -> p_frame. */
 noise_params_t profile_noise(const profile_t *prof, noise_model_t model, double p_override);

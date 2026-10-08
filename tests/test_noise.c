@@ -160,6 +160,8 @@ TEST(profiles_lookup_and_sanity) {
     CHECK(t != NULL && h != NULL);
     CHECK(profile_by_name("nope") == NULL);
     CHECK(t == &PROFILE_TOLL_PLAZA);
+    CHECK(profile_by_id(profile_id(t)) == t && profile_by_id(profile_id(h)) == h);
+    CHECK(profile_by_id(7) == NULL);
     CHECK(h == &PROFILE_HOSPITAL_IMAGING);
     const profile_t *ps[2] = {t, h};
     for (int i = 0; i < 2; i++) {

@@ -40,3 +40,11 @@ noise_params_t profile_noise(const profile_t *prof, noise_model_t model, double 
         return noise_bsc(ov ? p_override : prof->bsc_p);
     }
 }
+
+int profile_id(const profile_t *prof) { return prof == &PROFILE_HOSPITAL_IMAGING ? 1 : 0; }
+
+const profile_t *profile_by_id(int id) {
+    if (id == 0) return &PROFILE_TOLL_PLAZA;
+    if (id == 1) return &PROFILE_HOSPITAL_IMAGING;
+    return NULL;
+}
