@@ -59,6 +59,8 @@ TEST(packet_roundtrip_with_truth) {
     p.seq = 123456;
     p.nbits = 256;
     for (int i = 0; i < 256; i++) p.bits[i] = (uint8_t)((i * 7) % 3 == 0);
+    p.attempt = 2;
+    p.strategy = 3;
     p.has_truth = 1;
     p.truth.flips = 3;
     p.truth.profile = 1;
@@ -74,6 +76,8 @@ TEST(packet_roundtrip_with_truth) {
     CHECK_EQ_INT(q.code, CODE_SECDED84);
     CHECK_EQ_INT(q.rs_t, 4);
     CHECK_EQ_INT(q.seq, 123456);
+    CHECK_EQ_INT(q.attempt, 2);
+    CHECK_EQ_INT(q.strategy, 3);
     CHECK_EQ_INT(q.nbits, 256);
     CHECK(memcmp(p.bits, q.bits, 256) == 0);
     CHECK_EQ_INT(q.has_truth, 1);

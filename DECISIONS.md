@@ -124,3 +124,32 @@ Format: what was chosen / the alternative / why.
   The "each block sees at most one burst error" guarantee holds when D divides the coded length.
 - The benchmark adds interleaved variants `hamming74+il8` and `bch3116+il8` (drawn dashed in the
   base code's colour) and RS (`rs`, or `rs_t<N>` with `--rs-t N`).
+
+## Week 2 - task 2: ARQ and Hybrid ARQ
+
+- `--strategy {fec,arq,harq,adaptive}`, default `fec`: with fec no feedback is ever sent and all
+  week-1 output is unchanged (verified by the existing integration tests).
+- 🔀 `arq` sends **uncoded** frames (CRC-32 only) whatever `--code` says; `harq` is Hybrid ARQ
+  type I (same FEC code on every retransmission, no soft combining). Alternative: incremental
+  redundancy (type II). Why: type I is the textbook baseline and keeps every transmission
+  independently decodable; IR would need receiver buffering across attempts.
+- 🔀 **Simulated round trip**: the vehicle waits rtt/2 before each transmission and the tollgate
+  waits rtt/2 before each ACK/NAK (`--rtt-ms`, default 20). Loopback itself is ~0 ms.
+  Alternative: delay inside the channel process. Why: the feedback path bypasses the channel.
+- Feedback (ACK/NAK + window statistics) goes tollgate -> vehicle directly on port 9002 and is
+  never corrupted, only lost: `--fb-drop P` makes the tollgate drop feedback (failure injection).
+  Stop-and-wait rules: feedback for another seq is ignored; an ACK for the current seq counts
+  whatever attempt it answers; a NAK for an older attempt is ignored; no feedback within
+  `--timeout-ms` (default 100) = NAK. At most `--max-retries` (default 4) retransmissions.
+  The tollgate ACKs every copy of a seq it already holds a valid copy of (so a lost ACK costs
+  one extra transmission, not a failure), ignores exact duplicates (same seq and attempt) and
+  counts each seq once, with the class of its first accepted copy.
+- Packet header version 2: two new bytes `attempt` and `strategy` at offsets 14-15 (old fields
+  unchanged), feedback has its own 22-byte format (`include/feedback.h`).
+- The stop-and-wait logic is one state machine (`src/sender.c`) used by both `bin/vehicle` and
+  the in-process simulator `src/linksim.c`, so the benchmark measures the same protocol.
+- 🔀 Latency definitions. Bench (simulated clock): **delivery latency** = time from the frame's
+  first transmission until the receiver holds a CRC-valid copy, with airtime = coded bits /
+  160 kbit/s (a typical RFID tag-to-reader rate), RTT 20 ms, timeout 100 ms. Undelivered
+  frames count as failures and are excluded from latency. p99 = nearest-rank percentile. The UDP
+  vehicle can only measure "until ACK minus the simulated return trip" (labelled as such).

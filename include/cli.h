@@ -11,6 +11,7 @@
 #include "fec.h"
 #include "noise.h"
 #include "profiles.h"
+#include "sender.h"
 
 typedef struct {
     /* common flags (FIXED INTERFACE) */
@@ -38,6 +39,19 @@ typedef struct {
     const char *summary_path;  /* --summary-file FILE: key=value summary */
     const char *out_path;      /* --out FILE (bench) */
     long frames;               /* --frames N (bench) */
+    /* week 2: retransmission strategies and the adaptive controller */
+    strategy_t strategy;       /* --strategy {fec,arq,harq,adaptive}  default fec */
+    int rtt_ms;                /* --rtt-ms        simulated round-trip time, default 20 */
+    int timeout_ms;            /* --timeout-ms    stop-and-wait timeout, default 100 */
+    int max_retries;           /* --max-retries   default 4 */
+    double fb_drop;            /* --fb-drop       probability the tollgate drops a feedback */
+    int window;                /* --window        receiver sliding window W, default 32 */
+    double up_threshold;       /* --up-threshold   default 0.15 */
+    double down_threshold;     /* --down-threshold default 0.05 */
+    int start_level;           /* --start-level    adaptive start level, default 1 */
+    const char *schedule;      /* --schedule "toll:200,hospital:200" (channel) */
+    int strategies;            /* --strategies    bench: strategy comparison mode */
+    const char *trace_path;    /* --trace FILE    bench: adaptive level trace CSV */
 } cli_opts_t;
 
 void cli_defaults(cli_opts_t *o);
@@ -49,6 +63,9 @@ void cli_usage(FILE *f, const char *prog);
 
 /* Noise parameters implied by --profile, --model, --p and --burst-len. */
 noise_params_t cli_noise_params(const cli_opts_t *o);
+
+/* Controller parameters implied by --window, --up/down-threshold, --start-level. */
+adapt_params_t cli_adapt_params(const cli_opts_t *o);
 
 /* FEC configuration implied by --code, --rs-t and --interleave. */
 fec_config_t cli_fec_config(const cli_opts_t *o);

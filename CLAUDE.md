@@ -24,7 +24,7 @@ Two noise profiles (parameters are **modelling assumptions**, see `include/profi
 
 ```
  +----------------- header (NOT corrupted by channel) ----------------+---- coded payload ----+
- | magic | ver | type | code id | rs_t | interleave | seq | nbits    |  FEC( ID96 || CRC32 ) |
+ | magic | ver | type | code | rs_t | il | seq | nbits | attempt | strat |  FEC( ID96 || CRC32 ) |
  +--------------------------------------------------------------------+-----------------------+
 ```
 

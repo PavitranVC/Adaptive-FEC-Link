@@ -13,10 +13,18 @@
  * Besides every registered code (RS with --rs-t, default 4) it also benchmarks interleaved
  * variants "hamming74+il<D>" and "bch3116+il<D>" (D = --interleave if > 1, else 8).
  * Optional filters: --code X, --model Y. Usage: bin/bench --profile toll --frames 5000 --out f.csv
+ *
+ * STRATEGY MODE (week 2):  bin/bench --strategies --frames N --out results/bench_strategy.csv
+ *   Compares fec (fixed codes) vs arq vs harq vs adaptive with the link simulator (linksim.h,
+ *   simulated clock: RTT, timeout, airtime at 160 kbit/s). Channels: TOLL_PLAZA and
+ *   HOSPITAL_IMAGING (profile default models) and, with --schedule, the scheduled channel.
+ *   CSV: strategy,code,channel,frames,success_rate,silent_wrong_rate,retx_per_frame,
+ *        mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes
  */
 #include <stdio.h>
 #include <string.h>
 #include "cli.h"
+#include "linksim.h"
 #include "sim.h"
 
 static const double BSC_P[] = {0.0005, 0.001, 0.002, 0.005, 0.01, 0.015, 0.02, 0.03, 0.05, 0.07, 0.1};
@@ -78,11 +86,78 @@ static int build_variants(const cli_opts_t *o, int only_code, variant_t *vs) {
     return nv;
 }
 
+/* ---------------------------------------------------------------- strategy comparison ---- */
+
+typedef struct { const char *label; strategy_t strategy; code_id_t code; } strat_row_t;
+
+static const strat_row_t STRAT_ROWS[] = {
+    {"fec", STRAT_FEC, CODE_HAMMING74}, {"fec", STRAT_FEC, CODE_BCH157},
+    {"fec", STRAT_FEC, CODE_BCH3116},   {"fec", STRAT_FEC, CODE_RS},
+    {"arq", STRAT_ARQ, CODE_NONE},
+    {"harq", STRAT_HARQ, CODE_HAMMING74}, {"harq", STRAT_HARQ, CODE_BCH157},
+    {"harq", STRAT_HARQ, CODE_BCH3116},
+};
+
+static void base_params(const cli_opts_t *o, linksim_params_t *lp) {
+    linksim_defaults(lp);
+    lp->adapt = cli_adapt_params(o);
+    lp->max_retries = o->max_retries;
+    lp->rtt_ms = o->rtt_ms;
+    lp->timeout_ms = o->timeout_ms;
+    lp->fb_drop = o->fb_drop;
+    lp->frames = o->frames;
+    lp->seed = o->seed;
+}
+
+static void profile_channel(const profile_t *prof, linksim_params_t *lp) {
+    lp->nseg = 1;
+    lp->seg[0].noise = profile_noise(prof, prof->default_model, -1.0);
+    lp->seg[0].frames = 0;
+    lp->seg[0].label = prof->label;
+}
+
+static void strategy_row(FILE *csv, const char *channel, linksim_params_t *lp,
+                         const strat_row_t *row, FILE *trace) {
+    lp->strategy = row->strategy;
+    lp->fixed = fec_config(row->code);
+    linksim_result_t r;
+    linksim_run(lp, &r, trace);
+    const char *code = row->strategy == STRAT_ADAPTIVE ? "ladder" : fec_code_name(row->code);
+    fprintf(csv, "%s,%s,%s,%ld,%.6f,%.6f,%.4f,%.3f,%.3f,%.4f,%ld\n", row->label, code, channel,
+            r.frames, r.success_rate, r.silent_wrong_rate, r.retx_per_frame, r.mean_latency_ms,
+            r.p99_latency_ms, r.mean_code_rate, r.level_changes);
+    printf("  %-9s %-10s %-17s success=%6.4f retx/frame=%6.3f latency mean=%7.2f ms p99=%7.2f ms rate=%.3f\n",
+           row->label, code, channel, r.success_rate, r.retx_per_frame, r.mean_latency_ms,
+           r.p99_latency_ms, r.mean_code_rate);
+}
+
+static int run_strategies(const cli_opts_t *o) {
+    const char *path = o->out_path ? o->out_path : "results/bench_strategy.csv";
+    FILE *csv = fopen(path, "w");
+    if (!csv) { perror(path); return 1; }
+    fprintf(csv, "strategy,code,channel,frames,success_rate,silent_wrong_rate,retx_per_frame,"
+                 "mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes\n");
+    printf("bench --strategies: %ld frames per row, RTT %d ms, timeout %d ms, max %d retries -> %s\n",
+           o->frames, o->rtt_ms, o->timeout_ms, o->max_retries, path);
+    const profile_t *profs[2] = {&PROFILE_TOLL_PLAZA, &PROFILE_HOSPITAL_IMAGING};
+    for (int c = 0; c < 2; c++) {
+        linksim_params_t lp;
+        base_params(o, &lp);
+        profile_channel(profs[c], &lp);
+        for (size_t i = 0; i < sizeof STRAT_ROWS / sizeof STRAT_ROWS[0]; i++)
+            strategy_row(csv, profs[c]->label, &lp, &STRAT_ROWS[i], NULL);
+    }
+    fclose(csv);
+    printf("bench: wrote %s\n", path);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     cli_opts_t o;
     cli_defaults(&o);
     int rc = cli_parse(&o, argc, argv);
     if (rc) return rc > 0 ? 0 : 2;
+    if (o.strategies) return run_strategies(&o);
     int only_code = has_flag(argc, argv, "--code"), only_model = o.model_set;
     const char *path = o.out_path ? o.out_path : "results/bench.csv";
     FILE *csv = fopen(path, "w");

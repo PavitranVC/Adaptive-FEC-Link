@@ -190,6 +190,16 @@ TEST(profile_noise_override_of_p) {
     CHECK_EQ_INT(d.burst.length, t->burst.length);
 }
 
+TEST(set_params_switches_mid_run) {
+    noise_params_t a = noise_bsc(0.0), b = noise_bsc(1.0);
+    noise_t ch;
+    noise_init(&ch, &a, 1);
+    uint8_t d[100] = {0};
+    CHECK_EQ_INT(noise_apply(&ch, d, 100, NULL), 0);
+    noise_set_params(&ch, &b);
+    CHECK_EQ_INT(noise_apply(&ch, d, 100, NULL), 100);
+}
+
 TEST(model_names) {
     noise_model_t m;
     CHECK(noise_model_from_name("bsc", &m) == 0 && m == NOISE_BSC);
@@ -212,6 +222,7 @@ int main(void) {
     RUN(burst_longer_than_frame_is_clamped);
     RUN(profiles_lookup_and_sanity);
     RUN(profile_noise_override_of_p);
+    RUN(set_params_switches_mid_run);
     RUN(model_names);
     return TEST_REPORT();
 }

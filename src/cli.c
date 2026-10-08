@@ -20,6 +20,14 @@ void cli_defaults(cli_opts_t *o) {
     o->color = -1;
     o->idle_timeout_ms = 10000;
     o->frames = 5000;
+    o->strategy = STRAT_FEC;
+    o->rtt_ms = 20;
+    o->timeout_ms = 100;
+    o->max_retries = 4;
+    o->window = 32;
+    o->up_threshold = 0.15;
+    o->down_threshold = 0.05;
+    o->start_level = 1;
 }
 
 void cli_usage(FILE *f, const char *prog) {
@@ -45,7 +53,19 @@ void cli_usage(FILE *f, const char *prog) {
         "  --idle-timeout-ms <int>     stop after this much silence (default 10000, 0 = never)\n"
         "  --log <file>                per-frame CSV log\n"
         "  --summary-file <file>       tollgate: key=value summary\n"
-        "  --frames <int> --out <file> bench: frames per point, CSV output\n",
+        "  --frames <int> --out <file> bench: frames per point, CSV output\n"
+        "week 2:\n"
+        "  --strategy {fec,arq,harq,adaptive}  default fec (no feedback)\n"
+        "  --rtt-ms <int>              simulated round-trip time (default 20)\n"
+        "  --timeout-ms <int>          stop-and-wait timeout (default 100)\n"
+        "  --max-retries <int>         retransmissions per frame (default 4)\n"
+        "  --fb-drop <float>           tollgate drops this fraction of feedback (failure injection)\n"
+        "  --window <int>              adaptive: receiver window W in frames (default 32)\n"
+        "  --up-threshold <float>      adaptive: step up if window failure rate > this (0.15)\n"
+        "  --down-threshold <float>    adaptive: step down if predicted failure < this (0.05)\n"
+        "  --start-level <int>         adaptive: start level 0..5 (default 1)\n"
+        "  --schedule <spec>           channel: profile schedule, e.g. toll:200,hospital:200\n"
+        "  --strategies [--trace FILE] bench: compare strategies on the --schedule channel\n",
         prog);
 }
 
@@ -133,6 +153,31 @@ static int apply_flag(cli_opts_t *o, const char *f, const char *v) {
         o->out_path = v;
     } else if (!strcmp(f, "--frames")) {
         return parse_long(f, v, 1, 100000000L, &o->frames);
+    } else if (!strcmp(f, "--strategy")) {
+        if (strategy_from_name(v, &o->strategy)) {
+            fprintf(stderr, "error: unknown strategy '%s' (fec, arq, harq, adaptive)\n", v);
+            return -1;
+        }
+    } else if (!strcmp(f, "--rtt-ms")) {
+        return parse_int(f, v, 0, 60000, &o->rtt_ms);
+    } else if (!strcmp(f, "--timeout-ms")) {
+        return parse_int(f, v, 1, 600000, &o->timeout_ms);
+    } else if (!strcmp(f, "--max-retries")) {
+        return parse_int(f, v, 0, 100, &o->max_retries);
+    } else if (!strcmp(f, "--fb-drop")) {
+        return parse_prob(f, v, &o->fb_drop);
+    } else if (!strcmp(f, "--window")) {
+        return parse_int(f, v, 1, 1024, &o->window);
+    } else if (!strcmp(f, "--up-threshold")) {
+        return parse_prob(f, v, &o->up_threshold);
+    } else if (!strcmp(f, "--down-threshold")) {
+        return parse_prob(f, v, &o->down_threshold);
+    } else if (!strcmp(f, "--start-level")) {
+        return parse_int(f, v, 0, 5, &o->start_level);
+    } else if (!strcmp(f, "--schedule")) {
+        o->schedule = v;
+    } else if (!strcmp(f, "--trace")) {
+        o->trace_path = v;
     } else {
         fprintf(stderr, "error: unknown flag '%s' (try --help)\n", f);
         return -1;
@@ -146,6 +191,7 @@ static int apply_switch(cli_opts_t *o, const char *f) {
     else if (!strcmp(f, "--color")) o->color = 1;
     else if (!strcmp(f, "--show-bits")) o->show_bits = 1;
     else if (!strcmp(f, "--quiet")) o->quiet = 1;
+    else if (!strcmp(f, "--strategies")) o->strategies = 1;
     else return 0;
     return 1;
 }
@@ -154,7 +200,9 @@ static int is_value_flag(const char *f) {
     static const char *const FLAGS[] = {
         "--code", "--profile", "--model", "--p", "--seed", "--count", "--delay-ms",
         "--burst-len", "--rs-t", "--interleave", "--host", "--channel-port", "--tollgate-port",
-        "--feedback-port", "--idle-timeout-ms", "--log", "--summary-file", "--out", "--frames"};
+        "--feedback-port", "--idle-timeout-ms", "--log", "--summary-file", "--out", "--frames",
+        "--strategy", "--rtt-ms", "--timeout-ms", "--max-retries", "--fb-drop", "--window",
+        "--up-threshold", "--down-threshold", "--start-level", "--schedule", "--trace"};
     for (size_t i = 0; i < sizeof FLAGS / sizeof FLAGS[0]; i++)
         if (!strcmp(f, FLAGS[i])) return 1;
     return 0;
@@ -195,6 +243,16 @@ noise_params_t cli_noise_params(const cli_opts_t *o) {
     noise_params_t np = profile_noise(o->profile, m, o->p);
     if (m == NOISE_BURST && o->burst_len > 0) np.burst.length = o->burst_len;
     return np;
+}
+
+adapt_params_t cli_adapt_params(const cli_opts_t *o) {
+    adapt_params_t a;
+    adapt_defaults(&a);
+    a.window = o->window;
+    a.up_threshold = o->up_threshold;
+    a.down_threshold = o->down_threshold;
+    a.start_level = o->start_level;
+    return a;
 }
 
 fec_config_t cli_fec_config(const cli_opts_t *o) {

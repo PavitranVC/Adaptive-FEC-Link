@@ -51,6 +51,10 @@ noise_params_t noise_burst(int length, double p_frame, double density);
 
 void noise_init(noise_t *ch, const noise_params_t *params, uint64_t seed);
 
+/* Switch to new parameters mid-run (e.g. a scheduled profile change). The RNG stream continues;
+ * the Gilbert-Elliott state is redrawn from the new stationary distribution. */
+void noise_set_params(noise_t *ch, const noise_params_t *params);
+
 /* Flips bits of `bits` in place according to the model. If mask != NULL, mask[i] = 1 exactly
  * where bit i was flipped (the ground-truth error pattern). Returns the number of flips. */
 size_t noise_apply(noise_t *ch, uint8_t *bits, size_t n, uint8_t *mask);

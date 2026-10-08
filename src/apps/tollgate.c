@@ -8,11 +8,20 @@
  *     SILENT_WRONG   CRC ok but the ID is wrong (ground truth from the channel's sidecar)
  * Per frame it logs: seq, code, bits flipped (truth), bits corrected, CRC result, class,
  * decode latency (FEC decode + CRC check, microseconds).
+ *
+ * Week 2: when a frame's header says strategy != fec, the tollgate answers every transmission
+ * with ACK (it now holds a CRC-valid copy of that seq) or NAK (CRC failed) on the feedback port
+ * (9002), after a simulated return propagation of rtt/2. The feedback also carries the sliding
+ * window statistics used by the adaptive controller (window.h). Retransmissions of the same seq
+ * are decoded again; a frame's final class is that of its first accepted copy (or DETECTED_FAIL
+ * if no copy passed). Duplicates (same seq and attempt) are ignored.
  */
 #include <stdio.h>
 #include <string.h>
 #include "bits.h"
+#include "adapt.h"
 #include "cli.h"
+#include "feedback.h"
 #include "fec.h"
 #include "frame.h"
 #include "netutil.h"
@@ -21,14 +30,26 @@
 #include "profiles.h"
 #include "receiver.h"
 #include "term.h"
+#include "window.h"
 
 #define TAG "TOLLGATE"
 #define COL T_CYAN
 
 typedef struct {
     long sent;                 /* from the END packet, -1 if unknown */
-    long received, duplicates;
-    long cls[4];
+    long received, duplicates; /* received = distinct frames (seq numbers) */
+    long transmissions;        /* every decoded transmission, incl. retransmissions */
+    long cls[4];               /* final class per distinct frame */
+    int strategy;              /* strategy seen in the headers */
+    /* the frame currently being (re)transmitted */
+    int cur_valid, cur_delivered, cur_attempt;
+    uint32_t cur_seq;
+    frame_class_t cur_cls;
+    /* feedback */
+    int fbfd;
+    window_t win;
+    rng_t fb_rng;
+    long fb_sent, fb_dropped;
     unsigned long long flipped, corrected;
     double lat_sum, lat_max;
     int code, rs_t, interleave, nbits;
@@ -37,6 +58,7 @@ typedef struct {
 
 typedef struct {
     uint32_t seq;
+    int attempt;
     int flipped, corrected, crc_ok;
     frame_class_t cls;
     double lat_us;
@@ -101,20 +123,24 @@ static void print_report(const frame_report_t *r, const char *code) {
     char flipped[16];
     if (r->flipped >= 0) snprintf(flipped, sizeof flipped, "%2d", r->flipped);
     else snprintf(flipped, sizeof flipped, " ?");
-    term_say(TAG, COL, "seq=%-4u code=%-11s flipped=%s corrected=%2d crc=%s%-4s%s %s%s%-13s%s tag=%s lat=%6.2fus",
-             r->seq, code, flipped, r->corrected,
+    char seq[24];
+    if (r->attempt > 0) snprintf(seq, sizeof seq, "%u#%d", r->seq, r->attempt);
+    else snprintf(seq, sizeof seq, "%u", r->seq);
+    term_say(TAG, COL, "seq=%-4s code=%-11s flipped=%s corrected=%2d crc=%s%-4s%s %s%s%-13s%s tag=%s lat=%6.2fus",
+             seq, code, flipped, r->corrected,
              r->crc_ok ? term_c(T_GREEN) : term_c(T_RED), r->crc_ok ? "OK" : "FAIL", term_c(T_RESET),
              term_c(T_BOLD), term_c(class_color(r->cls)), frame_class_name(r->cls), term_c(T_RESET),
              r->tag_rx, r->lat_us);
 }
 
-static void handle_data(const cli_opts_t *o, packet_t *p, stats_t *st, FILE *log) {
+/* Decodes and reports one transmission; returns its class, or -1 if it was dropped. */
+static int handle_data(const cli_opts_t *o, packet_t *p, stats_t *st, FILE *log, rx_decode_t *dout) {
     uint8_t rx[PACKET_MAX_BITS];
     rx_decode_t d;
     /* ---- decode: sees ONLY the header and the received bits (never p->truth) ---- */
     if (rx_decode_packet(p, &d) != 0) {
         term_say(TAG, COL, "dropping frame seq=%u with unknown code/size", p->seq);
-        return;
+        return -1;
     }
     memcpy(rx, p->bits, p->nbits);
     fec_config_t fc = d.cfg;
@@ -122,6 +148,7 @@ static void handle_data(const cli_opts_t *o, packet_t *p, stats_t *st, FILE *log
     /* ---- evaluation: classification against the channel's ground truth ---- */
     frame_report_t r;
     r.seq = p->seq;
+    r.attempt = p->attempt;
     r.flipped = p->has_truth ? p->truth.flips : -1;
     r.corrected = d.corrected_bits;
     r.crc_ok = d.crc_ok;
@@ -132,8 +159,7 @@ static void handle_data(const cli_opts_t *o, packet_t *p, stats_t *st, FILE *log
     if (p->has_truth) tag_to_hex(p->truth.tag, r.tag_true);
     else strcpy(r.tag_true, "?");
 
-    st->received++;
-    st->cls[r.cls]++;
+    st->transmissions++;
     st->flipped += r.flipped > 0 ? (unsigned)r.flipped : 0;
     st->corrected += (unsigned)r.corrected;
     st->lat_sum += lat;
@@ -149,6 +175,45 @@ static void handle_data(const cli_opts_t *o, packet_t *p, stats_t *st, FILE *log
     if (log)
         fprintf(log, "%u,%s,%d,%d,%d,%s,%.3f,%s,%s\n", r.seq, fec_code_name(fc.code), r.flipped,
                 r.corrected, r.crc_ok, frame_class_name(r.cls), r.lat_us, r.tag_true, r.tag_rx);
+    *dout = d;
+    return (int)r.cls;
+}
+
+/* ACK if we hold a CRC-valid copy of this seq (now or from an earlier attempt), else NAK. */
+static void send_feedback(const cli_opts_t *o, stats_t *st, const packet_t *p, const rx_decode_t *d) {
+    feedback_t fb;
+    uint8_t wire[FEEDBACK_BYTES];
+    memset(&fb, 0, sizeof fb);
+    int lvl = ladder_level_of(&d->cfg);
+    window_push(&st->win, lvl, !rx_accept(d), d->corrected_bits, p->nbits);
+    window_fill_feedback(&st->win, &fb);
+    fb.type = st->cur_delivered ? FB_ACK : FB_NAK;
+    fb.seq = p->seq;
+    fb.attempt = p->attempt;
+    fb.level = (uint8_t)(lvl < 0 ? 255 : lvl);
+    if (o->rtt_ms > 0) sleep_us(o->rtt_ms * 500L);              /* return propagation */
+    if (rng_bernoulli(&st->fb_rng, o->fb_drop)) {                /* failure injection */
+        st->fb_dropped++;
+        if (!o->quiet) term_say(TAG, COL, "   %s(feedback for seq=%u dropped - injected loss)%s",
+                                term_c(T_YELLOW), p->seq, term_c(T_RESET));
+        return;
+    }
+    feedback_serialize(&fb, wire, sizeof wire);
+    net_sendto(st->fbfd, o->host, o->feedback_port, wire, sizeof wire);
+    st->fb_sent++;
+    if (!o->quiet)
+        term_say(TAG, COL, "   -> %s%s%s seq=%u  (window: %u frames, %u failed, BER^ %.4f)",
+                 fb.type == FB_ACK ? term_c(T_GREEN) : term_c(T_YELLOW),
+                 fb.type == FB_ACK ? "ACK" : "NAK", term_c(T_RESET), fb.seq, fb.win_n, fb.win_fail,
+                 fb.win_bits ? (double)fb.win_corrected / fb.win_bits : 0.0);
+}
+
+/* The previous seq is complete: count its final class once. */
+static void finalize_frame(stats_t *st) {
+    if (!st->cur_valid) return;
+    st->received++;
+    st->cls[st->cur_cls]++;
+    st->cur_valid = 0;
 }
 
 static double pct(long a, long b) { return b > 0 ? 100.0 * (double)a / (double)b : 0.0; }
@@ -179,7 +244,11 @@ static void print_summary(const stats_t *st) {
         term_say(TAG, COL, "UNVERIFIED      : %5ld  (no ground truth)", st->cls[CLASS_UNVERIFIED]);
     term_say(TAG, COL, "bits            : flipped %llu, corrected %llu", st->flipped, st->corrected);
     term_say(TAG, COL, "decode latency  : mean %.2f us, max %.2f us",
-             st->received ? st->lat_sum / (double)st->received : 0.0, st->lat_max);
+             st->transmissions ? st->lat_sum / (double)st->transmissions : 0.0, st->lat_max);
+    if (st->strategy > STRAT_FEC)
+        term_say(TAG, COL, "strategy %-7s: %ld transmissions (%ld retransmissions), %ld feedback sent, %ld dropped (injected), %ld duplicates ignored",
+                 strategy_name((strategy_t)st->strategy), st->transmissions,
+                 st->transmissions - st->received, st->fb_sent, st->fb_dropped, st->duplicates);
 }
 
 static void write_summary(const char *path, const stats_t *st) {
@@ -204,8 +273,14 @@ static void write_summary(const char *path, const stats_t *st) {
     fprintf(f, "success_rate=%.4f\n", n ? (double)st->cls[CLASS_CORRECT] / (double)n : 0.0);
     fprintf(f, "bits_flipped=%llu\n", st->flipped);
     fprintf(f, "bits_corrected=%llu\n", st->corrected);
-    fprintf(f, "mean_decode_us=%.3f\n", n ? st->lat_sum / (double)n : 0.0);
+    fprintf(f, "mean_decode_us=%.3f\n", st->transmissions ? st->lat_sum / (double)st->transmissions : 0.0);
     fprintf(f, "max_decode_us=%.3f\n", st->lat_max);
+    if (st->strategy > STRAT_FEC) {
+        fprintf(f, "strategy=%s\n", strategy_name((strategy_t)st->strategy));
+        fprintf(f, "transmissions=%ld\n", st->transmissions);
+        fprintf(f, "retransmissions=%ld\n", st->transmissions - n);
+        fprintf(f, "feedback_dropped=%ld\n", st->fb_dropped);
+    }
     fclose(f);
 }
 
@@ -226,7 +301,7 @@ int main(int argc, char **argv) {
     FILE *log = o.log_path ? fopen(o.log_path, "w") : NULL;
     if (log) fprintf(log, "seq,code,flipped,corrected,crc_ok,class,latency_us,tag_true,tag_rx\n");
 
-    term_say(TAG, COL, "listening on %s:%d (feedback port %d reserved for week 2)",
+    term_say(TAG, COL, "listening on %s:%d (ACK/NAK feedback to port %d when strategy != fec)",
              o.host, o.tollgate_port, o.feedback_port);
     if (o.show_bits && !o.quiet) print_legend();
 
@@ -234,6 +309,9 @@ int main(int argc, char **argv) {
     memset(&st, 0, sizeof st);
     st.sent = -1;
     st.profile = st.model = -1;
+    st.fbfd = net_udp_socket();
+    window_init(&st.win, o.window);
+    rng_seed(&st.fb_rng, rng_derive(o.seed, "tollgate-fbdrop"));
     int got_first = 0;
     while (!stop_requested()) {
         long n = net_recv(fd, wire, sizeof wire, got_first && o.idle_timeout_ms ? o.idle_timeout_ms : -1);
@@ -245,13 +323,35 @@ int main(int argc, char **argv) {
         }
         got_first = 1;
         if (pkt.type == PKT_END) { st.sent = pkt.seq; break; }
-        if (seen[pkt.seq & 0xFFFF] && pkt.seq < 0x10000) { st.duplicates++; continue; }
-        seen[pkt.seq & 0xFFFF] = 1;
-        handle_data(&o, &pkt, &st, log);
+        if (st.cur_valid && pkt.seq == st.cur_seq) {
+            if (pkt.attempt <= st.cur_attempt) { st.duplicates++; continue; }  /* same copy again */
+        } else if (seen[pkt.seq & 0xFFFF] && pkt.seq < 0x10000) {
+            st.duplicates++;                                              /* old frame, late copy */
+            continue;
+        } else {                                                          /* a new frame */
+            finalize_frame(&st);
+            seen[pkt.seq & 0xFFFF] = 1;
+            st.cur_valid = 1;
+            st.cur_seq = pkt.seq;
+            st.cur_delivered = 0;
+            st.cur_cls = CLASS_DETECTED_FAIL;
+        }
+        st.cur_attempt = pkt.attempt;
+        st.strategy = pkt.strategy;
+        rx_decode_t d;
+        int cls = handle_data(&o, &pkt, &st, log, &d);
+        if (cls < 0) continue;
+        if (!st.cur_delivered) {                     /* first accepted copy decides the class */
+            st.cur_cls = (frame_class_t)cls;
+            st.cur_delivered = rx_accept(&d);
+        }
+        if (pkt.strategy != STRAT_FEC) send_feedback(&o, &st, &pkt, &d);
     }
+    finalize_frame(&st);
     print_summary(&st);
     if (o.summary_path) write_summary(o.summary_path, &st);
     if (log) fclose(log);
     net_close(fd);
+    net_close(st.fbfd);
     return 0;
 }

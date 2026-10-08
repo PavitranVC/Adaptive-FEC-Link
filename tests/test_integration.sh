@@ -67,13 +67,37 @@ check "compare ok" [ $? -eq 0 ]
 check "compare shows both codes" grep -q 'hamming74.*bch157' "$OUT"
 check "compare shows silent_wrong row" grep -q '^silent_wrong' "$OUT"
 
+echo "== integration: Stop-and-Wait ARQ over the feedback port"
+sh tools/demo.sh $PORTS --no-color --profile toll --strategy arq --seed 8 --count 20 \
+    --rtt-ms 2 --timeout-ms 50 --max-retries 10 --delay-ms 0 --idle-timeout-ms 3000 >"$OUT" 2>&1
+check "arq run ok" [ $? -eq 0 ]
+check "arq strategy reported" [ "$(val strategy)" = arq ]
+check "arq every frame accounted once" [ "$(val received)" = 20 ]
+check "arq retransmitted at least once" [ "$(val retransmissions)" -ge 1 ]
+check "arq sent uncoded frames" [ "$(val code)" = none ]
+check "arq vehicle saw ACKs" grep -q 'ACK after' "$OUT"
+
+echo "== integration: Hybrid ARQ with 30% injected feedback loss"
+sh tools/demo.sh $PORTS --no-color --profile toll --strategy harq --code hamming74 --seed 8 \
+    --count 20 --rtt-ms 2 --timeout-ms 40 --fb-drop 0.3 --delay-ms 0 --idle-timeout-ms 3000 >"$OUT" 2>&1
+check "harq run ok" [ $? -eq 0 ]
+check "harq all 20 frames correct" [ "$(val correct)" = 20 ]
+check "harq feedback really dropped" [ "$(val feedback_dropped)" -ge 1 ]
+check "harq vehicle timed out" grep -q 'timeout (no feedback' "$OUT"
+
 echo "== integration: bench smoke test"
 ./bin/bench --profile toll --frames 50 --code hamming74 --out results/tmp/bench_smoke.csv >"$OUT" 2>&1
 check "bench ok" [ $? -eq 0 ]
 check "bench csv header" grep -q '^code,model,param,frames,frame_success_rate,detected_fail_rate,silent_wrong_rate,code_rate,mean_decode_us$' results/tmp/bench_smoke.csv
 rows=$(grep -c '^hamming74,' results/tmp/bench_smoke.csv)
 check "bench csv has rows for all 3 models" [ "$rows" -ge 3 ] && grep -q ',burst,' results/tmp/bench_smoke.csv
+./bin/bench --strategies --frames 50 --out results/tmp/bench_strategy_smoke.csv >"$OUT" 2>&1
+check "bench --strategies ok" [ $? -eq 0 ]
+check "strategy csv header" grep -q '^strategy,code,channel,frames,success_rate,silent_wrong_rate,retx_per_frame,mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes$' results/tmp/bench_strategy_smoke.csv
+check "strategy csv has arq and harq rows" grep -q '^arq,' results/tmp/bench_strategy_smoke.csv
 if command -v python3 >/dev/null 2>&1 && python3 -c "import matplotlib" 2>/dev/null; then
+    python3 tools/plot.py results/tmp/bench_strategy_smoke.csv --outdir results/tmp >"$OUT" 2>&1
+    check "strategy plot runs" [ $? -eq 0 ]
     python3 tools/plot.py results/tmp/bench_smoke.csv --outdir results/tmp >"$OUT" 2>&1
     check "plot.py runs" [ $? -eq 0 ]
 else

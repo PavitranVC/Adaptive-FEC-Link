@@ -2,6 +2,8 @@
 """Plots for the FEC benchmark.
 
 usage: python3 tools/plot.py results/bench.csv [--suffix _hospital] [--outdir results]
+       python3 tools/plot.py results/bench_strategy.csv    (strategy comparison, week 2)
+       python3 tools/plot.py results/adaptive_trace.csv    (adaptive code level over time)
 
 Writes PNGs into results/:
   success_vs_p_bsc<suffix>.png      frame success rate vs flip probability p (BSC), per code
@@ -140,12 +142,82 @@ def bar_plot(rows, values, title, ylabel, out, fmt):
     return out
 
 
+CHANNEL_COLORS = {"TOLL_PLAZA": PALETTE[0], "HOSPITAL_IMAGING": PALETTE[1]}
+
+
+def channel_color(ch):
+    return CHANNEL_COLORS.get(ch, PALETTE[2])
+
+
+def strategy_plot(path, outdir):
+    """Strategy comparison: success rate, latency (mean bar + p99 marker), retransmissions."""
+    with open(path, newline="") as f:
+        rows = list(csv.DictReader(f))
+    for r in rows:
+        for k in ("success_rate", "retx_per_frame", "mean_latency_ms", "p99_latency_ms", "mean_code_rate"):
+            r[k] = float(r[k])
+    labels, seen = [], set()
+    for r in rows:
+        key = (r["strategy"], r["code"])
+        if key not in seen:
+            seen.add(key)
+            labels.append(key)
+    channels = []
+    for r in rows:
+        if r["channel"] not in channels:
+            channels.append(r["channel"])
+    pretty_row = lambda k: k[0] + ("" if k[0] in ("arq", "adaptive") else " " + LABELS.get(k[1], k[1]))
+    fig, axes = plt.subplots(1, 3, figsize=(15, 0.42 * len(labels) * len(channels) / 2 + 2.6),
+                             facecolor=SURFACE, sharey=True)
+    h = 0.8 / len(channels)
+    for ci, ch in enumerate(channels):
+        by = {(r["strategy"], r["code"]): r for r in rows if r["channel"] == ch}
+        ys = [i + (ci - (len(channels) - 1) / 2) * h for i in range(len(labels))]
+        get = lambda k, field: by[k][field] if k in by else float("nan")
+        col = channel_color(ch)
+        axes[0].barh(ys, [get(k, "success_rate") for k in labels], height=h, color=col,
+                     edgecolor=SURFACE, linewidth=1, label=ch)
+        axes[1].barh(ys, [get(k, "mean_latency_ms") for k in labels], height=h, color=col,
+                     edgecolor=SURFACE, linewidth=1, label=f"{ch} mean")
+        axes[1].plot([get(k, "p99_latency_ms") for k in labels], ys, linestyle="none", marker="|",
+                     markersize=9, markeredgewidth=2, color=TEXT if ci == 0 else MUTED,
+                     label=f"{ch} p99")
+        axes[2].barh(ys, [get(k, "retx_per_frame") for k in labels], height=h, color=col,
+                     edgecolor=SURFACE, linewidth=1)
+    axes[0].set_yticks(range(len(labels)))
+    axes[0].set_yticklabels([pretty_row(k) for k in labels], fontsize=9)
+    axes[0].invert_yaxis()
+    style(axes[0], "Frame success rate", "CORRECT / frames", "")
+    axes[0].set_xlim(0, 1.05)
+    style(axes[1], "Delivery latency (bar = mean, | = p99)", "milliseconds (simulated clock)", "")
+    style(axes[2], "Retransmissions per frame", "transmissions / frame - 1", "")
+    handles, names = axes[1].get_legend_handles_labels()
+    fig.legend(handles, names, frameon=False, fontsize=8, loc="upper right", ncol=2 * len(channels),
+               labelcolor=TEXT)
+    fig.suptitle("Strategy comparison: FEC vs ARQ vs Hybrid ARQ vs adaptive  "
+                 f"[{rows[0]['frames']} frames per bar]", color=TEXT, x=0.01, ha="left", y=0.995)
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    out = os.path.join(outdir, "strategy_comparison.png")
+    fig.savefig(out, dpi=130)
+    plt.close(fig)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("csv")
     ap.add_argument("--suffix", default="")
     ap.add_argument("--outdir", default="results")
     a = ap.parse_args()
+    with open(a.csv) as f:
+        header = f.readline()
+    os.makedirs(a.outdir, exist_ok=True)
+    if header.startswith("strategy,"):
+        print("wrote", strategy_plot(a.csv, a.outdir))
+        return
+    if header.startswith("frame,tx,segment,level"):
+        print("wrote", trace_plot(a.csv, a.outdir))
+        return
     rows = load(a.csv)
     if not rows:
         sys.exit(f"{a.csv} is empty - run 'make bench' first")
@@ -218,6 +290,10 @@ def silent_plot(rows, out, tag):
     fig.savefig(out, dpi=130)
     plt.close(fig)
     return out
+
+
+def trace_plot(path, outdir):
+    raise SystemExit("adaptive trace plot: added in week-2 task 3")
 
 
 if __name__ == "__main__":

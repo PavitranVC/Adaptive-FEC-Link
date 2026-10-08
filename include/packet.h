@@ -11,7 +11,9 @@
  *   7   1   flags: bit0 = ground-truth sidecar present
  *   8   4   seq (big-endian)
  *  12   2   nbits = number of coded bits (big-endian)
- *  14   B   coded bits, packed MSB-first, B = ceil(nbits / 8)        <- the ONLY corrupted part
+ *  14   1   attempt (0 = first transmission, 1.. = retransmissions)          [version 2]
+ *  15   1   strategy (0 fec, 1 arq, 2 harq, 3 adaptive): != fec -> tollgate sends ACK/NAK
+ *  16   B   coded bits, packed MSB-first, B = ceil(nbits / 8)        <- the ONLY corrupted part
  *  ---- evaluation-only sidecar, appended by the channel (flags bit0) ----
  *  +0   2   number of flipped bits
  *  +2   1   profile id, +3 1 noise model id
@@ -28,8 +30,8 @@
 #include "fec.h"
 #include "frame.h"
 
-#define PACKET_VERSION 1
-#define PACKET_HEADER_BYTES 14
+#define PACKET_VERSION 2
+#define PACKET_HEADER_BYTES 16
 #define PACKET_MAX_BITS FEC_MAX_CODED_BITS
 #define PACKET_MAX_BYTES (PACKET_HEADER_BYTES + 16 + 2 * (PACKET_MAX_BITS / 8))
 
@@ -50,6 +52,8 @@ typedef struct {
     uint8_t interleave;
     uint32_t seq;
     uint16_t nbits;
+    uint8_t attempt;
+    uint8_t strategy;
     uint8_t bits[PACKET_MAX_BITS];
     int has_truth;
     truth_t truth;

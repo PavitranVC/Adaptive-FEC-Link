@@ -25,6 +25,8 @@ size_t packet_serialize(const packet_t *p, uint8_t *buf, size_t cap) {
     buf[7] = p->has_truth ? 1 : 0;
     put32(buf + 8, p->seq);
     put16(buf + 12, p->nbits);
+    buf[14] = p->attempt;
+    buf[15] = p->strategy;
     bits_pack(p->bits, p->nbits, buf + PACKET_HEADER_BYTES);
     if (p->has_truth) {
         uint8_t *t = buf + PACKET_HEADER_BYTES + nb;
@@ -47,6 +49,8 @@ int packet_parse(const uint8_t *buf, size_t len, packet_t *p) {
     p->type = buf[3]; p->code = buf[4]; p->rs_t = buf[5]; p->interleave = buf[6];
     p->seq = get32(buf + 8);
     p->nbits = nbits;
+    p->attempt = buf[14];
+    p->strategy = buf[15];
     p->has_truth = has_truth;
     bits_unpack(buf + PACKET_HEADER_BYTES, nbits, p->bits);
     if (has_truth) {

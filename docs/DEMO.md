@@ -42,6 +42,21 @@ make demo-hospital CODE=rs                 # Reed-Solomon shrugs them off
 sh tools/demo.sh --profile hospital --code bch3116 --interleave 8 --count 20 --delay-ms 250
 ```
 
+### Retransmission strategies (week 2)
+
+```sh
+make demo-arq                  # Stop-and-Wait ARQ: uncoded + CRC-32, retransmit on NAK/timeout
+make demo-harq                 # Hybrid ARQ: Hamming(7,4) first, retransmit only if the CRC fails
+make demo-harq CODE=bch157
+# failure injection: the tollgate drops 30% of its ACK/NAKs -> vehicle timeouts, no lost frames
+sh tools/demo.sh --strategy harq --code hamming74 --fb-drop 0.3 --count 20 --delay-ms 250
+```
+
+The vehicle prints `NAK`, `timeout`, `retransmission #k` and `ACK after n transmission(s)`;
+the tollgate prints `-> ACK/NAK` after each frame and `seq=5#1` for retransmission 1 of seq 5.
+Extra flags: `--rtt-ms` (simulated round trip, default 20), `--timeout-ms` (100),
+`--max-retries` (4), `--fb-drop` (0). With `--strategy fec` (default) nothing changes.
+
 ## 2. Three-terminal demo (shows that they really are separate processes)
 
 Use the **same flags** in all three terminals; start them in this order:
@@ -89,7 +104,8 @@ Same seed means the same sequence of tag IDs and the same noise process for ever
 ## 5. Benchmark and plots
 
 ```sh
-make bench                      # results/bench.csv (+ results/bench_hospital.csv)
+make bench                      # results/bench.csv (+ bench_hospital.csv, bench_strategy.csv)
+./bin/bench --strategies --frames 5000 --out results/bench_strategy.csv   # FEC vs ARQ vs HARQ
 pip install -r requirements.txt
 make plots                      # results/*.png
 ```

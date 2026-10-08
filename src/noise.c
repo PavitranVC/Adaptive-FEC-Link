@@ -43,6 +43,11 @@ void noise_init(noise_t *ch, const noise_params_t *params, uint64_t seed) {
     ch->ge_bad = params->model == NOISE_GE ? rng_bernoulli(&ch->rng, ge_pi_bad(&params->ge)) : 0;
 }
 
+void noise_set_params(noise_t *ch, const noise_params_t *params) {
+    ch->params = *params;
+    ch->ge_bad = params->model == NOISE_GE ? rng_bernoulli(&ch->rng, ge_pi_bad(&params->ge)) : 0;
+}
+
 static void flip(uint8_t *bits, uint8_t *mask, size_t i) {
     bits[i] ^= 1;
     if (mask) mask[i] = 1;

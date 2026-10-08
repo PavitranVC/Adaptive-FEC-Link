@@ -67,6 +67,30 @@ TEST(rejects_bad_input) {
     CHECK(parse(&o, 3, a5) != 0);
 }
 
+TEST(week2_flags) {
+    cli_opts_t o;
+    cli_defaults(&o);
+    CHECK(o.strategy == STRAT_FEC);                 /* default keeps week-1 behaviour */
+    const char *argv[] = {"x", "--strategy", "harq", "--rtt-ms", "30", "--timeout-ms", "150",
+                          "--max-retries", "6", "--fb-drop", "0.1", "--window", "16",
+                          "--up-threshold", "0.2", "--down-threshold", "0.02", "--start-level", "3",
+                          "--schedule", "toll:10,hospital:10"};
+    CHECK_EQ_INT(parse(&o, 21, argv), 0);
+    CHECK(o.strategy == STRAT_HARQ);
+    CHECK_EQ_INT(o.rtt_ms, 30);
+    CHECK_EQ_INT(o.timeout_ms, 150);
+    CHECK_EQ_INT(o.max_retries, 6);
+    CHECK_NEAR(o.fb_drop, 0.1, 0);
+    adapt_params_t a = cli_adapt_params(&o);
+    CHECK_EQ_INT(a.window, 16);
+    CHECK_NEAR(a.up_threshold, 0.2, 0);
+    CHECK_NEAR(a.down_threshold, 0.02, 0);
+    CHECK_EQ_INT(a.start_level, 3);
+    CHECK(o.schedule && !strcmp(o.schedule, "toll:10,hospital:10"));
+    const char *bad[] = {"x", "--strategy", "tcp"};
+    CHECK(parse(&o, 3, bad) != 0);
+}
+
 TEST(ports) {
     const char *argv[] = {"x", "--channel-port", "19000", "--tollgate-port", "19001"};
     cli_opts_t o;
@@ -80,6 +104,7 @@ int main(void) {
     RUN(common_flags);
     RUN(model_defaults_to_profile_model);
     RUN(rejects_bad_input);
+    RUN(week2_flags);
     RUN(ports);
     return TEST_REPORT();
 }
