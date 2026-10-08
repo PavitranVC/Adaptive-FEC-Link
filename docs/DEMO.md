@@ -34,6 +34,14 @@ Equivalent direct call with any flags:
 sh tools/demo.sh --profile hospital --model burst --burst-len 12 --code secded84 --count 30 --delay-ms 300
 ```
 
+Good story for a presentation (same seed, hospital interference):
+
+```sh
+make demo-hospital CODE=hamming74          # bursts break Hamming
+make demo-hospital CODE=rs                 # Reed-Solomon shrugs them off
+sh tools/demo.sh --profile hospital --code bch3116 --interleave 8 --count 20 --delay-ms 250
+```
+
 ## 2. Three-terminal demo (shows that they really are separate processes)
 
 Use the **same flags** in all three terminals; start them in this order:
@@ -73,6 +81,8 @@ Same seed means the same sequence of tag IDs and the same noise process for ever
 | `--p` | bsc: flip probability; ge: P(good->bad) per bit; burst: probability a frame gets a burst |
 | `--burst-len` | burst model: burst length L |
 | `--seed`, `--count`, `--delay-ms` | reproducibility, number of frames, pacing |
+| `--rs-t` | Reed-Solomon correctable bytes (1..16, default 4) |
+| `--interleave` | block-interleaver depth (default 1 = off); e.g. 8 for hamming74/bch3116 |
 | `--no-color`, `--show-bits`, `--quiet` | output control |
 | `--log FILE`, `--summary-file FILE` | per-frame CSV / key=value summary |
 
