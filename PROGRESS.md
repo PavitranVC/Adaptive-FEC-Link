@@ -21,7 +21,7 @@ and tagged `v0.2-week2` once `make test` passed. All pushes succeeded.
 
 ## Test status
 
-`make test` = 21 unit-test binaries + `tests/test_integration.sh` (real three-process UDP runs on
+`make test` = 20 unit-test binaries + `tests/test_integration.sh` (real three-process UDP runs on
 ports 19100-19102: reproducibility, hospital profile, BCH, RS, interleaver, compare, ARQ, HARQ
 with 30% injected feedback loss, adaptive on a toll->hospital->toll schedule, JSON-lines log +
 dashboard HTTP server, bench + plot smoke tests) + `tests/test_dashboard.py`.

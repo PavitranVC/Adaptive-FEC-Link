@@ -53,7 +53,7 @@ TEST(model_defaults_to_profile_model) {
 }
 
 TEST(rejects_bad_input) {
-    fprintf(stderr, "    (5 error messages expected below)\n");
+    fprintf(stderr, "    (6 error messages expected below)\n");
     cli_opts_t o;
     const char *a1[] = {"x", "--code", "turbo"};
     CHECK(parse(&o, 3, a1) != 0);
