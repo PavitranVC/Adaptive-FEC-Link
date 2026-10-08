@@ -198,6 +198,53 @@ def goodput_plot(rows, outdir):
     return out
 
 
+RTT_SERIES = [("fec", "rs_t8"), ("arq", "none"), ("harq", "bch3116"), ("harq", "rs_t4"),
+              ("harq", "rs_t8"), ("adaptive", "ladder")]
+
+
+def rtt_plot(paths, outdir, channel="schedule"):
+    """p99 delivery latency vs simulated RTT, one line per strategy (files bench_rtt_<N>.csv)."""
+    import re
+    data = {}
+    for p in paths:
+        m = re.search(r"rtt_(\d+)", os.path.basename(p))
+        if not m:
+            continue
+        with open(p, newline="") as f:
+            for r in csv.DictReader(f):
+                if r["channel"] == channel:
+                    data.setdefault((r["strategy"], r["code"]), []).append(
+                        (int(m.group(1)), float(r["p99_latency_ms"])))
+    fig, ax = plt.subplots(figsize=(9, 5.2), facecolor=SURFACE)
+    ends = []                                   # end labels; overlapping lines share one label
+    top = max(y for v in data.values() for _, y in v) or 1.0
+    for i, key in enumerate(RTT_SERIES):
+        if key not in data:
+            continue
+        pts = sorted(data[key])
+        name = "adaptive" if key[0] == "adaptive" else f"{key[0]} {key[1]}"
+        ax.plot([x for x, _ in pts], [y for _, y in pts], marker="o", markersize=7, linewidth=2,
+                color=PALETTE[i], label=name)
+        for e in ends:
+            if abs(e[1][1] - pts[-1][1]) < 0.04 * top:
+                e[0].append(name)
+                break
+        else:
+            ends.append(([name], pts[-1]))
+    for names, xy in ends:
+        ax.annotate(" / ".join(names) + (" (overlap)" if len(names) > 1 else ""), xy, xytext=(6, 0),
+                    textcoords="offset points", va="center", fontsize=8, color=TEXT)
+    style(ax, "p99 delivery latency vs round-trip time (scheduled channel)",
+          "simulated RTT (ms) - a modelling assumption", "p99 latency (ms)")
+    ax.legend(frameon=False, fontsize=9, loc="upper left", labelcolor=TEXT)
+    ax.set_xlim(right=ax.get_xlim()[1] * 1.45)
+    fig.tight_layout()
+    out = os.path.join(outdir, "rtt_sensitivity.png")
+    fig.savefig(out, dpi=130)
+    plt.close(fig)
+    return out
+
+
 def strategy_plot(path, outdir):
     """Strategy comparison: success rate, latency (mean bar + p99 marker), retransmissions."""
     with open(path, newline="") as f:
@@ -258,10 +305,15 @@ def strategy_plot(path, outdir):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("csv")
+    ap.add_argument("csv", nargs="+")
     ap.add_argument("--suffix", default="")
     ap.add_argument("--outdir", default="results")
     a = ap.parse_args()
+    if len(a.csv) > 1 or "rtt_" in os.path.basename(a.csv[0]):
+        os.makedirs(a.outdir, exist_ok=True)
+        print("wrote", rtt_plot(a.csv, a.outdir))
+        return
+    a.csv = a.csv[0]
     with open(a.csv) as f:
         header = f.readline()
     os.makedirs(a.outdir, exist_ok=True)

@@ -207,7 +207,7 @@ make bench                      # results/bench.csv (+ bench_hospital.csv, bench
     --trace results/adaptive_trace.csv --out results/bench_strategy.csv  # fec/arq/harq/adaptive
 pip install -r requirements.txt
 make plots                      # results/*.png incl. strategy_comparison.png, adaptive_level.png,
-                                #   goodput_vs_success.png
+                                #   goodput_vs_success.png, rtt_sensitivity.png
 ```
 
 ## 6. Troubleshooting

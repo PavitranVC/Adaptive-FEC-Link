@@ -120,12 +120,15 @@ bench: all
 	./bin/bench --profile hospital --frames $(FRAMES) --seed $(SEED) --out results/bench_hospital.csv
 	./bin/bench --strategies --schedule $(SCHEDULE) --frames $(FRAMES) --seed $(SEED) \
 		--trace results/adaptive_trace.csv --out results/bench_strategy.csv
+	for r in 5 20 50; do ./bin/bench --strategies --schedule $(SCHEDULE) --frames $(FRAMES) \
+		--seed $(SEED) --rtt-ms $$r --out results/bench_rtt_$$r.csv >/dev/null || exit 1; done
 
 plots:
 	$(PYTHON) tools/plot.py results/bench.csv
 	@if [ -f results/bench_hospital.csv ]; then $(PYTHON) tools/plot.py results/bench_hospital.csv --suffix _hospital; fi
 	@if [ -f results/bench_strategy.csv ]; then $(PYTHON) tools/plot.py results/bench_strategy.csv; fi
 	@if [ -f results/adaptive_trace.csv ]; then $(PYTHON) tools/plot.py results/adaptive_trace.csv; fi
+	@if [ -f results/bench_rtt_5.csv ]; then $(PYTHON) tools/plot.py results/bench_rtt_5.csv results/bench_rtt_20.csv results/bench_rtt_50.csv; fi
 
 clean:
 	rm -rf build bin/vehicle bin/channel bin/tollgate bin/bench results/tmp

@@ -213,3 +213,12 @@ Format: what was chosen / the alternative / why.
   0.571, BCH 0.449/0.516) cost more parity than RS t=4 (0.667). A ladder of RS codes with
   t = 1..8 (rates 0.89 .. 0.50) would be the natural next experiment; it was deliberately not
   done here so the reported numbers are not the result of tuning after seeing the data.
+
+## Final polish - RTT sensitivity (decision #18)
+
+- **#18 addendum: the round-trip time is a modelling assumption** (default 20 ms; no real RFID
+  link was measured). `make bench` now also runs the strategy comparison at RTT 5, 20 and 50 ms
+  (`results/bench_rtt_<N>.csv`, plot `results/rtt_sensitivity.png`). On the scheduled channel the
+  p99 latency grows linearly with RTT for every feedback strategy (ARQ 27 -> 94 -> 229 ms; HARQ +
+  RS t=4 / t=8 and adaptive 11 -> 33 -> 78 ms), while plain FEC only pays one-way propagation
+  (RS t=8: 4 -> 12 -> 27 ms). Rankings do not change with RTT; goodput does not depend on RTT.

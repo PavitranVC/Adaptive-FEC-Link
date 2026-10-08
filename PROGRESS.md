@@ -1,7 +1,8 @@
 # PROGRESS
 
 Week 1 on `claude/bold-gauss-xza289` (merged into `main`). Week 2 on `week2`, merged into `main`
-and tagged `v0.2-week2` once `make test` passed. All pushes succeeded.
+(tag `v0.2-week2` exists only locally: the session proxy refused tag pushes with HTTP 403).
+Final polish on `final-polish`, fast-forwarded into `main`.
 
 ## Status
 
@@ -18,6 +19,9 @@ and tagged `v0.2-week2` once `make test` passed. All pushes succeeded.
 | W2-2 Stop-and-Wait ARQ + Hybrid ARQ, ACK/NAK on port 9002, `--fb-drop`, strategy bench | done |
 | W2-3 Adaptive FEC controller, `--schedule`, level-over-time plot, `make demo-adaptive` | done |
 | W2-4 Live dashboard (`--jsonl`, `tools/dashboard.py`, `make dashboard`) | done |
+| Polish 1 docs/DEMO.md = single demo guide (setup per OS, venv, troubleshooting, talking script) | done |
+| Polish 2 HARQ + RS t=4/t=8 baselines, goodput metric + plot, honest result tables | done - claim did NOT hold (see below) |
+| Polish 3 RTT sensitivity 5/20/50 ms, `results/rtt_sensitivity.png` | done |
 
 ## Test status
 
@@ -57,11 +61,13 @@ hospital burst and never flaps (tests + `results/adaptive_level.png`). See DECIS
 
 ## Exact next step
 
-Week-2 leftovers in PLAN.md: deliberate failure-injection testing beyond `--fb-drop` (malformed
-packets, lost END, header corruption experiment) and the final report plots. Suggested start:
-add `--corrupt-header P` to `bin/channel` (flip header bits too) and a test showing the tollgate
-drops/logs such frames instead of crashing; then write the report section around
-`results/strategy_comparison.png` and `results/adaptive_level.png`.
+1. Failure-injection testing (PLAN.md): add `--corrupt-header P` to `bin/channel`, malformed and
+   truncated packets, lost END, port already in use; each with a test that the receiver logs and
+   drops instead of crashing.
+2. Final report: build it around `results/goodput_vs_success.png`, `results/strategy_comparison.png`,
+   `results/adaptive_level.png`, `results/rtt_sensitivity.png` and the honest finding above.
+3. Optional experiment (decide as a team, report it as a NEW experiment, not a fix): an all-RS
+   ladder (t = 1..8) where lower rungs really have higher code rates.
 
 ## 🔀 Decisions to review (details in DECISIONS.md)
 
@@ -88,5 +94,7 @@ drops/logs such frames instead of crashing; then write the report section around
 16. `--schedule` counts transmissions (air time), not frames.
 17. ARQ sends uncoded frames (CRC only); HARQ is type I (no soft combining).
 18. Simulated RTT split rtt/2 + rtt/2 between vehicle and tollgate; bench latency = delivery
-    latency on a simulated clock at 160 kbit/s.
+    latency on a simulated clock at 160 kbit/s. RTT itself is a modelling assumption (5/20/50 ms
+    sensitivity run: rankings unchanged).
+20. Goodput counts the 128-bit payload (ID + CRC) as useful, all coded bits as cost.
 19. Dashboard uses the Python standard library only (no Flask).
