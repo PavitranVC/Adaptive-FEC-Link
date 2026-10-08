@@ -24,3 +24,25 @@ Format: what was chosen / the alternative / why.
   (n = 2^r - 1), with the textbook layout (parity at power-of-two positions, syndrome = error position).
 - Block decoders return the number of corrected bits (>= 0) or a negative value when they
   *detect* an uncorrectable pattern (SECDED double error; later BCH/RS decoding failure).
+
+## Phase 2
+
+- RNG: xoshiro256** seeded by splitmix64, implemented in-repo (not `rand()`), so a given
+  `--seed` is bit-identical across Linux/WSL/macOS. Each process derives its own sub-stream
+  with `rng_derive(seed, "<role>")`.
+- 🔀 Gilbert-Elliott channel state is **kept across frames** (one continuous interference process)
+  and starts from the stationary distribution. Alternative: reset to "good" at every frame.
+  Why: real interference does not know frame boundaries; resetting would under-estimate bursts.
+- 🔀 Burst model = classic "burst of length L": first and last bit of the burst always flip, the
+  bits in between flip with probability `density` (0.5 in both profiles), and a frame gets a
+  burst with probability `p_frame`. Alternative: flip all L bits. Why: matches the textbook
+  definition used for burst-correction guarantees (RS/interleaving) and is less artificial.
+- 🔀 Meaning of `--p` per model: BSC -> flip probability p; GE -> p_gb (rate at which bursts
+  start; mean burst length 1/p_bg and e_good/e_bad come from the profile); BURST -> probability a
+  frame contains a burst (length from the profile, override with `--burst-len`).
+  Alternative: one global "BER" knob. Why: each model keeps its physical meaning and the profile
+  stays the single source of the other parameters.
+- 🔀 Profile numbers (see `include/profiles.h`) are modelling assumptions, not measurements:
+  TOLL_PLAZA BSC p=0.01, GE (0.002, 0.5, 0.005, 0.5) ~BER 0.007, burst L=4 in 20% of frames;
+  HOSPITAL_IMAGING BSC p=0.02, GE (0.005, 0.08, 0.002, 0.5) ~BER 0.031 with 12.5-bit mean
+  bursts, burst L=16 in 50% of frames. Default model: toll -> bsc, hospital -> ge.

@@ -10,7 +10,7 @@ outputs -> commit `phaseN: <summary>` -> push.
 - [x] **Phase 1 - Bit utilities, CRC-32, Hamming(7,4), Hamming(15,11), SECDED(8,4)**.
       Tests: every single-bit error at every position corrected; 2-bit error makes plain Hamming
       miscorrect and CRC-32 catches it; SECDED detects 2-bit errors.
-- [ ] **Phase 2 - Channel noise models**: BSC(p), Gilbert-Elliott (p_gb, p_bg, e_good, e_bad),
+- [x] **Phase 2 - Channel noise models**: BSC(p), Gilbert-Elliott (p_gb, p_bg, e_good, e_bad),
       fixed burst of length L at random position. TOLL_PLAZA / HOSPITAL_IMAGING presets in one header.
       Tests: measured flip rates / burst lengths statistically close to parameters.
 - [ ] **Phase 3 - UDP pipeline**: bin/vehicle, bin/channel, bin/tollgate with CLI flags; per-frame
