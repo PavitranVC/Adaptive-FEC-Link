@@ -54,6 +54,15 @@ Format: what was chosen / the alternative / why.
   the true ID by decoding the *clean* codeword. Alternative: a separate truth log file joined
   offline by seq. Why: live classification in the tollgate during the demo, no file races; the
   tollgate's decoder never reads the sidecar (only `frame_classify` does).
+  **Week-2 integrity check (task 1): PASSED.** Code review of `src/apps/tollgate.c` showed the
+  decoder only ever read `p->bits`; the sidecar fed only the bit map, statistics and
+  classification. To make this a structural guarantee the receive path was moved into
+  `src/receiver.c`: `rx_decode()` takes only the header's code parameters and the received bits
+  (it has no parameter through which truth could reach it); `rx_classify()` is the only reader of
+  the sidecar. `tests/test_receiver.c` decodes 2100 corrupted frames (all 7 codes, bursty
+  channel) with the sidecar present, zeroed, filled with garbage, stripped, and stripped via the
+  wire format: decoded ID, CRC result, failure flags, corrected-bit count and repaired codeword
+  are bit-identical in every case. No decoder fix was needed.
 - 🔀 A frame is DETECTED_FAIL if the CRC fails **or** a block decoder detected an uncorrectable
   pattern (SECDED double error, later BCH/RS failure), even if the CRC happens to pass.
   Alternative: CRC only. Why: a real receiver would also reject a frame its decoder flagged.

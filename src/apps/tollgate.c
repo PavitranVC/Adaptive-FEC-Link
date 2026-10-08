@@ -19,6 +19,7 @@
 #include "noise.h"
 #include "packet.h"
 #include "profiles.h"
+#include "receiver.h"
 #include "term.h"
 
 #define TAG "TOLLGATE"
@@ -108,31 +109,26 @@ static void print_report(const frame_report_t *r, const char *code) {
 }
 
 static void handle_data(const cli_opts_t *o, packet_t *p, stats_t *st, FILE *log) {
-    fec_config_t fc = fec_config((code_id_t)p->code);
-    fc.rs_t = p->rs_t;
-    fc.interleave = p->interleave;
-    if (!fec_config_valid(&fc) || fec_coded_bits(&fc, PAYLOAD_BITS) != p->nbits) {
+    uint8_t rx[PACKET_MAX_BITS];
+    rx_decode_t d;
+    /* ---- decode: sees ONLY the header and the received bits (never p->truth) ---- */
+    if (rx_decode_packet(p, &d) != 0) {
         term_say(TAG, COL, "dropping frame seq=%u with unknown code/size", p->seq);
         return;
     }
-    uint8_t rx[PACKET_MAX_BITS], payload[PAYLOAD_BITS], id[TAG_ID_BYTES];
     memcpy(rx, p->bits, p->nbits);
+    fec_config_t fc = d.cfg;
 
-    /* ---- the timed part: FEC decode + CRC check ---- */
-    fec_result_t res;
-    double t0 = now_us();
-    fec_decode(&fc, p->bits, p->nbits, payload, PAYLOAD_BITS, &res);
-    int crc_ok = frame_parse_payload(payload, id);
-    double lat = now_us() - t0;
-
+    /* ---- evaluation: classification against the channel's ground truth ---- */
     frame_report_t r;
     r.seq = p->seq;
     r.flipped = p->has_truth ? p->truth.flips : -1;
-    r.corrected = res.corrected_bits;
-    r.crc_ok = crc_ok;
-    r.cls = frame_classify(crc_ok, res.failed_blocks > 0, id, p->has_truth ? p->truth.tag : NULL);
-    r.lat_us = lat;
-    tag_to_hex(id, r.tag_rx);
+    r.corrected = d.corrected_bits;
+    r.crc_ok = d.crc_ok;
+    r.cls = rx_classify(&d, p);
+    r.lat_us = d.decode_us;
+    double lat = d.decode_us;
+    tag_to_hex(d.id, r.tag_rx);
     if (p->has_truth) tag_to_hex(p->truth.tag, r.tag_true);
     else strcpy(r.tag_true, "?");
 
@@ -148,7 +144,7 @@ static void handle_data(const cli_opts_t *o, packet_t *p, stats_t *st, FILE *log
     if (!o->quiet) {
         print_report(&r, fec_code_name(fc.code));
         if (o->show_bits && (r.flipped > 0 || r.corrected > 0))
-            print_bitmap(p, rx, p->bits, fec_block_n(&fc));
+            print_bitmap(p, rx, d.repaired, fec_block_n(&fc));
     }
     if (log)
         fprintf(log, "%u,%s,%d,%d,%d,%s,%.3f,%s,%s\n", r.seq, fec_code_name(fc.code), r.flipped,
