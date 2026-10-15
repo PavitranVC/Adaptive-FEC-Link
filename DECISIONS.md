@@ -340,3 +340,26 @@ Known limitations found (not fixed - design changes, see PROGRESS.md "Open probl
   latency. The single-seed "RS t=4 beats adaptive on every metric" (final polish) was wrong:
   retransmissions were already lower for adaptive in that run (0.076 vs 0.089), and RS t=4's
   p99 of 32 ms was seed luck (mean 42 +- 5 ms). README table now shows the 20-seed means.
+
+## Overnight A - task 4: all-RS ladder experiment (NEW experiment, pre-registered)
+
+Written and committed BEFORE any code for it was written or any run was made.
+
+- **Hypothesis:** "An adaptive ladder made only of RS codes t=1,2,4,6,8 (code rates 0.89 .. 0.50)
+  reaches HARQ+RS t=8 reliability at clearly higher goodput than the current ladder."
+- **Success criterion** (both must hold on the scheduled channel):
+  1. Goodput higher than both the current adaptive ladder (`mixed`) and HARQ + RS t=8 by more than
+     the 95% CI: the 95% CI of the PAIRED difference (all-RS adaptive minus X, same 20 seeds) lies
+     entirely above 0, for X = mixed adaptive and X = HARQ + RS t=8. (Also reported: whether the
+     unpaired per-strategy CIs overlap.)
+  2. Success rate within 0.5 percentage points of HARQ + RS t=8:
+     mean success(all-RS adaptive) >= mean success(HARQ + RS t=8) - 0.005.
+- **Fixed setup (no tuning after seeing results):** ladder `rs` = L0 RS(18,16) t=1 (rate 0.889),
+  L1 RS(20,16) t=2 (0.800), L2 RS(24,16) t=4 (0.667), L3 RS(28,16) t=6 (0.571), L4 RS(32,16) t=8
+  (0.500). Same controller code and defaults as today: window W = 32, up 0.20, down 0.05,
+  `--start-level 1` (the same index as today; = RS t=2 on this ladder), probe back-off max 16
+  windows, the same binomial step-down predictor (its RS byte-error model already exists). Same
+  link simulator, RTT 20 ms, timeout 100 ms, max 4 retries, schedule toll:2000,hospital:2000,
+  toll:2000, 5000 frames, seeds 42..61 (`--seeds 20 --seed 42`). Selected with `--ladder rs`;
+  default `--ladder mixed` must leave every existing result unchanged. The toll-only and
+  hospital-only channels are reported too, but the criterion is judged on the scheduled channel.
