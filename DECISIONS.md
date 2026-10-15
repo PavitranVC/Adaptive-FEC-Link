@@ -310,3 +310,33 @@ Known limitations found (not fixed - design changes, see PROGRESS.md "Open probl
      failure-injection test (gcc 13). The fuzzer found no parser bug.
 - `make sanitize CC=clang` could not be run here: this container lacks clang's ASan runtime
   (`libclang_rt.asan-x86_64.a`, package `libclang-rt-18-dev`). Not a project problem.
+
+## Overnight A - task 3: multi-seed statistics
+
+- 🔀 `bin/bench --strategies --seeds N` runs the strategy comparison for seeds seed..seed+N-1
+  (`make bench`: N = 20, seeds 42..61) and reports mean +- **95% confidence interval from
+  Student's t distribution** (N-1 = 19 degrees of freedom, t = 2.093; `src/stats.c`), not a
+  bootstrap. Alternative: bootstrap percentile CI. Why: t is explainable in two lines and each
+  per-seed value is already an average over 5000 frames (close to normal). Caveat: the p99 latency
+  of a HARQ code is quantized in steps of one round of retransmission, so its per-seed values can
+  be bimodal (HARQ + RS t=4: 32.4 or 53.6 ms) - the t-interval of that mean is approximate.
+- Comparisons between strategies use **paired differences** over the same seeds
+  (`results/bench_strategy_seeds_diff.csv`): every strategy sees the same tags and the same noise
+  per seed, so the per-seed difference removes the shared channel luck. "Significant" = the 95% CI
+  of the mean difference excludes 0. Default behaviour without `--seeds` is unchanged (checked:
+  `bench_strategy.csv` identical except the timing-noise latency columns).
+- **Results, scheduled channel toll -> hospital -> toll, 20 seeds** (adaptive minus baseline):
+
+  | metric | adaptive - HARQ+RS t=8 | adaptive - HARQ+RS t=4 |
+  |---|---|---|
+  | success rate | -0.051 +- 0.009 pp | -0.049 +- 0.009 pp |
+  | goodput | **+0.0133 +- 0.0024** | -0.1083 +- 0.0030 |
+  | retx / frame | +0.051 +- 0.002 | **-0.019 +- 0.003** |
+  | p99 latency | +0.002 ms (decode-time noise, practically 0) | **-8.7 +- 5.1 ms** |
+
+  So: (1) adaptive's goodput advantage over HARQ + RS t=8 IS outside the confidence interval, but
+  it is small (+2.7%) and costs 0.05 pp of success. (2) HARQ + RS t=4 is NOT better on every
+  metric: it wins success and goodput clearly, adaptive wins retransmissions/frame and p99
+  latency. The single-seed "RS t=4 beats adaptive on every metric" (final polish) was wrong:
+  retransmissions were already lower for adaptive in that run (0.076 vs 0.089), and RS t=4's
+  p99 of 32 ms was seed luck (mean 42 +- 5 ms). README table now shows the 20-seed means.

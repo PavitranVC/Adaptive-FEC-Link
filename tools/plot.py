@@ -4,6 +4,8 @@
 usage: python3 tools/plot.py results/bench.csv [--suffix _hospital] [--outdir results]
        python3 tools/plot.py results/bench_strategy.csv    (strategy comparison, week 2)
        python3 tools/plot.py results/adaptive_trace.csv    (adaptive code level over time)
+       python3 tools/plot.py results/bench_strategy_seeds.csv [more *_seeds.csv]
+                                                           (multi-seed means + 95% CI error bars)
 
 Writes PNGs into results/:
   success_vs_p_bsc<suffix>.png      frame success rate vs flip probability p (BSC), per code
@@ -22,6 +24,7 @@ try:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    import matplotlib.ticker
 except ImportError:
     sys.exit("matplotlib is missing: pip install -r requirements.txt")
 
@@ -198,6 +201,104 @@ def goodput_plot(rows, outdir):
     return out
 
 
+# ------------------------------------------------------------- multi-seed CI plot ----
+
+CI_EXTRA = {"ladder_rs": ("ADAPTIVE (all-RS ladder)", PALETTE[3], "*")}
+
+
+def load_ci(paths):
+    rows = []
+    for path in paths:
+        with open(path, newline="") as f:
+            for r in csv.DictReader(f):
+                for k in r:
+                    if k.endswith(("_mean", "_ci95")):
+                        r[k] = float(r[k])
+                rows.append(r)
+    return rows
+
+
+def ci_name(r):
+    if r["code"] in CI_EXTRA:
+        return CI_EXTRA[r["code"]][0]
+    return "ADAPTIVE" if r["strategy"] == "adaptive" else f"{r['strategy']} {r['code']}"
+
+
+def ci_style(r):
+    if r["code"] in CI_EXTRA:
+        _, col, mk = CI_EXTRA[r["code"]]
+        return col, mk, 14
+    fam = r["strategy"]
+    return FAMILY_COLORS.get(fam, MUTED), "D" if fam == "adaptive" else "o", 11 if fam == "adaptive" else 8
+
+
+def ci_plot(paths, outdir, channel="schedule"):
+    """Goodput vs success, mean over seeds with 95% CI error bars (x: success, y: goodput).
+    Left: every strategy; right: zoom on the reliable top-right corner where the CIs are visible."""
+    rows = [r for r in load_ci(paths) if r["channel"] == channel]
+    if not rows:
+        return None
+    seeds = rows[0]["seeds"]
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5.8), facecolor=SURFACE)
+    zoom = [r for r in rows if r["success_mean"] >= 0.999]
+    for ax, pts, full in ((axes[0], rows, True), (axes[1], zoom, False)):
+        for r in pts:
+            col, mk, ms = ci_style(r)
+            ax.errorbar(r["success_mean"], r["goodput_mean"], xerr=r["success_ci95"],
+                        yerr=r["goodput_ci95"], marker=mk, markersize=ms, linestyle="none",
+                        color=col, ecolor=col, elinewidth=1.5, capsize=4,
+                        markeredgecolor=SURFACE, markeredgewidth=1.5, zorder=3)
+        if full:                                      # nearby points share one label
+            groups = []
+            for r in sorted(pts, key=lambda r: -r["goodput_mean"]):
+                x, y = r["success_mean"], r["goodput_mean"]
+                for g in groups:
+                    if abs(g[0] - x) < 0.008 and abs(g[1] - y) < 0.03:
+                        g[2].append(ci_name(r))
+                        break
+                else:
+                    groups.append([x, y, [ci_name(r)]])
+            for x, y, names in groups:
+                # a label normally sits left of its point; if another point is close on the
+                # left (the label would run over it), it goes above the point instead (a group is
+                # anchored at its highest point, so above is free)
+                crowded = any(0 < x - gx < 0.07 and abs(gy - y) < 0.03 for gx, gy, _ in groups)
+                ax.annotate("\n".join(names), (x, y), xytext=(4, 10) if crowded else (-10, 0),
+                            textcoords="offset points", ha="right" if crowded else "right",
+                            va="bottom" if crowded else "center", fontsize=8, color=TEXT)
+        else:
+            for r in pts:
+                txt = (f"{ci_name(r)}\nsuccess {r['success_mean'] * 100:.3f}% +- {r['success_ci95'] * 100:.3f}"
+                       f"\ngoodput {r['goodput_mean']:.3f} +- {r['goodput_ci95']:.3f}")
+                ax.annotate(txt, (r["success_mean"], r["goodput_mean"]), xytext=(8, 10),
+                            textcoords="offset points", ha="right", va="bottom", fontsize=8.5, color=TEXT)
+        title = "all strategies" if full else "zoom: success >= 99.9% (error bars = 95% CI)"
+        style(ax, title, "frame success rate (mean over seeds)",
+              "goodput (payload bits / transmitted bits)" if full else "")
+        if full:
+            ax.set_xlim(max(0.0, min(r["success_mean"] for r in pts) - 0.12), 1.02)
+        else:
+            lo = min(r["success_mean"] - r["success_ci95"] for r in pts)
+            ax.set_xlim(lo - 1.5 * (1.0 - lo), 1.0 + 0.15 * (1.0 - lo))
+            ys = [r["goodput_mean"] for r in pts]
+            span = max(ys) - min(ys) or 0.05
+            ax.set_ylim(min(ys) - 0.1 * span, max(ys) + 0.3 * span)     # room for labels above
+            ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v * 100:.2f}%"))
+    for fam, col in FAMILY_COLORS.items():
+        axes[0].plot([], [], marker="D" if fam == "adaptive" else "o", linestyle="none", color=col, label=fam)
+    for code, (name, col, mk) in CI_EXTRA.items():
+        if any(r["code"] == code for r in rows):
+            axes[0].plot([], [], marker=mk, markersize=12, linestyle="none", color=col, label=name)
+    axes[0].legend(frameon=False, fontsize=9, loc="upper left", labelcolor=TEXT)
+    fig.suptitle(f"Goodput vs reliability on the scheduled channel (toll -> hospital -> toll), "
+                 f"mean of {seeds} seeds, 95% CI (Student t)", color=TEXT, x=0.01, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    out = os.path.join(outdir, "goodput_vs_success_ci.png")
+    fig.savefig(out, dpi=130)
+    plt.close(fig)
+    return out
+
+
 RTT_SERIES = [("fec", "rs_t8"), ("arq", "none"), ("harq", "bch3116"), ("harq", "rs_t4"),
               ("harq", "rs_t8"), ("adaptive", "ladder")]
 
@@ -309,6 +410,12 @@ def main():
     ap.add_argument("--suffix", default="")
     ap.add_argument("--outdir", default="results")
     a = ap.parse_args()
+    with open(a.csv[0]) as f:
+        first = f.readline()
+    if first.startswith("strategy,code,channel,seeds,"):
+        os.makedirs(a.outdir, exist_ok=True)
+        print("wrote", ci_plot(a.csv, a.outdir))
+        return
     if len(a.csv) > 1 or "rtt_" in os.path.basename(a.csv[0]):
         os.makedirs(a.outdir, exist_ok=True)
         print("wrote", rtt_plot(a.csv, a.outdir))

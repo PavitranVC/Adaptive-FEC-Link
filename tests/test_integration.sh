@@ -134,7 +134,16 @@ check "strategy csv header" grep -q '^strategy,code,channel,frames,success_rate,
 check "strategy csv has arq and harq rows" grep -q '^arq,' results/tmp/bench_strategy_smoke.csv
 check "strategy csv has adaptive on the schedule" grep -q '^adaptive,ladder,schedule,' results/tmp/bench_strategy_smoke.csv
 check "adaptive trace written" grep -q '^frame,tx,segment,level,attempts,class,latency_ms$' results/tmp/trace_smoke.csv
+./$BIN/bench --strategies --seeds 3 --schedule toll:30,hospital:30 --frames 40 \
+    --out results/tmp/seeds_smoke.csv >"$OUT" 2>&1
+check "bench --seeds ok" [ $? -eq 0 ]
+check "seeds csv header" grep -q '^strategy,code,channel,seeds,frames,success_mean,success_ci95,goodput_mean,goodput_ci95,retx_mean,retx_ci95,p99_mean,p99_ci95$' results/tmp/seeds_smoke.csv
+check "seeds csv: 3 channels x 12 rows" [ "$(grep -c ',3,40,' results/tmp/seeds_smoke.csv)" -eq 36 ]
+check "seeds raw csv: one row per seed" [ "$(grep -c '^adaptive,ladder,schedule,' results/tmp/seeds_smoke_raw.csv)" -eq 3 ]
+check "paired differences written" grep -q '^schedule,adaptive,harq_rs_t8,goodput,3,' results/tmp/seeds_smoke_diff.csv
 if command -v python3 >/dev/null 2>&1 && python3 -c "import matplotlib" 2>/dev/null; then
+    python3 tools/plot.py results/tmp/seeds_smoke.csv --outdir results/tmp >"$OUT" 2>&1
+    check "CI plot runs" [ $? -eq 0 ]
     python3 tools/plot.py results/tmp/bench_strategy_smoke.csv --outdir results/tmp >"$OUT" 2>&1
     check "strategy plot runs" [ $? -eq 0 ]
     python3 tools/plot.py results/tmp/trace_smoke.csv --outdir results/tmp >"$OUT" 2>&1

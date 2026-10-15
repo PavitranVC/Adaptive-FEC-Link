@@ -22,6 +22,14 @@
  *   CSV: strategy,code,channel,frames,success_rate,silent_wrong_rate,retx_per_frame,
  *        mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes,goodput
  *   goodput = CORRECT frames * 128 payload bits / all coded bits sent (parity + retransmissions)
+ *
+ * MULTI-SEED MODE (overnight task 3):  bin/bench --strategies --seeds 20 [--schedule ...]
+ *   Runs the same comparison for seeds seed, seed+1, ..., seed+N-1 and writes, per row, the mean
+ *   and the 95% confidence interval (Student t, N-1 degrees of freedom, see stats.h) of success
+ *   rate, goodput, retransmissions/frame and p99 latency to --out (default
+ *   results/bench_strategy_seeds.csv). Also writes <out>_raw.csv (one row per seed) and
+ *   <out>_diff.csv: PAIRED differences adaptive - HARQ+RS t=8 and adaptive - HARQ+RS t=4 on the
+ *   same seeds (mean, 95% CI, significant = CI excludes 0). Without --seeds nothing changes.
  */
 #include <stdio.h>
 #include <string.h>
@@ -29,6 +37,7 @@
 #include "linksim.h"
 #include "schedule.h"
 #include "sim.h"
+#include "stats.h"
 
 static const double BSC_P[] = {0.0005, 0.001, 0.002, 0.005, 0.01, 0.015, 0.02, 0.03, 0.05, 0.07, 0.1};
 static const double GE_PGB[] = {0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05};
@@ -124,17 +133,25 @@ static void profile_channel(const profile_t *prof, linksim_params_t *lp) {
     lp->seg[0].label = prof->label;
 }
 
-static void strategy_row(FILE *csv, const char *channel, linksim_params_t *lp,
-                         const strat_row_t *row, FILE *trace) {
+static void row_code_name(const strat_row_t *row, char *code, size_t cap) {
+    if (row->strategy == STRAT_ADAPTIVE) snprintf(code, cap, "ladder");
+    else if (row->code == CODE_RS) snprintf(code, cap, "rs_t%d", row->rs_t);
+    else snprintf(code, cap, "%s", fec_code_name(row->code));
+}
+
+static void run_row(linksim_params_t *lp, const strat_row_t *row, linksim_result_t *r, FILE *trace) {
     lp->strategy = row->strategy;
     lp->fixed = fec_config(row->code);
     lp->fixed.rs_t = row->rs_t;
+    linksim_run(lp, r, trace);
+}
+
+static void strategy_row(FILE *csv, const char *channel, linksim_params_t *lp,
+                         const strat_row_t *row, FILE *trace) {
     linksim_result_t r;
-    linksim_run(lp, &r, trace);
+    run_row(lp, row, &r, trace);
     char code[24];
-    if (row->strategy == STRAT_ADAPTIVE) snprintf(code, sizeof code, "ladder");
-    else if (row->code == CODE_RS) snprintf(code, sizeof code, "rs_t%d", row->rs_t);
-    else snprintf(code, sizeof code, "%s", fec_code_name(row->code));
+    row_code_name(row, code, sizeof code);
     fprintf(csv, "%s,%s,%s,%ld,%.6f,%.6f,%.4f,%.3f,%.3f,%.4f,%ld,%.4f\n", row->label, code, channel,
             r.frames, r.success_rate, r.silent_wrong_rate, r.retx_per_frame, r.mean_latency_ms,
             r.p99_latency_ms, r.mean_code_rate, r.level_changes, r.goodput);
@@ -182,12 +199,149 @@ static int run_strategies(const cli_opts_t *o) {
     return 0;
 }
 
+/* ------------------------------------------------------------ multi-seed comparison ---- */
+
+#define N_ROWS ((int)(sizeof STRAT_ROWS / sizeof STRAT_ROWS[0]))
+#define MAX_CH 3
+enum { M_SUCCESS, M_GOODPUT, M_RETX, M_P99, N_METRICS };
+static const char *const METRIC[N_METRICS] = {"success_rate", "goodput", "retx_per_frame",
+                                              "p99_latency_ms"};
+
+static double metric_of(const linksim_result_t *r, int m) {
+    switch (m) {
+    case M_SUCCESS: return r->success_rate;
+    case M_GOODPUT: return r->goodput;
+    case M_RETX:    return r->retx_per_frame;
+    default:        return r->p99_latency_ms;
+    }
+}
+
+static int find_row(strategy_t s, code_id_t code, int rs_t) {
+    for (int i = 0; i < N_ROWS; i++)
+        if (STRAT_ROWS[i].strategy == s && STRAT_ROWS[i].code == code &&
+            (code != CODE_RS || STRAT_ROWS[i].rs_t == rs_t))
+            return i;
+    return -1;
+}
+
+/* "results/x.csv" + "_raw" -> "results/x_raw.csv" */
+static void sibling_path(const char *path, const char *suffix, char *out, size_t cap) {
+    const char *dot = strrchr(path, '.');
+    size_t stem = dot ? (size_t)(dot - path) : strlen(path);
+    snprintf(out, cap, "%.*s%s%s", (int)stem, path, suffix, dot ? dot : "");
+}
+
+static FILE *open_csv(const char *path, const char *header) {
+    FILE *f = fopen(path, "w");
+    if (!f) { perror(path); return NULL; }
+    fprintf(f, "%s\n", header);
+    return f;
+}
+
+/* Paired difference a - b over the same seeds, for every metric. */
+static void write_diffs(FILE *f, const char *channel, linksim_result_t *ra, linksim_result_t *rb,
+                        const char *a, const char *b, int n) {
+    double d[1000];
+    for (int m = 0; m < N_METRICS; m++) {
+        for (int i = 0; i < n; i++) d[i] = metric_of(&ra[i], m) - metric_of(&rb[i], m);
+        stats_ci_t c = stats_mean_ci(d, n);
+        int sig = c.lo > 0 || c.hi < 0;
+        fprintf(f, "%s,%s,%s,%s,%d,%.6f,%.6f,%.6f,%.6f,%d\n", channel, a, b, METRIC[m], n,
+                c.mean, c.half, c.lo, c.hi, sig);
+        printf("  paired %-17s %-14s - %-14s %-15s %+9.4f +- %.4f %s\n", channel, a, b, METRIC[m],
+               c.mean, c.half, sig ? "(CI excludes 0)" : "(CI includes 0: no clear difference)");
+    }
+}
+
+static int run_strategies_seeds(const cli_opts_t *o) {
+    const char *path = o->out_path ? o->out_path : "results/bench_strategy_seeds.csv";
+    char raw_path[512], diff_path[512];
+    sibling_path(path, "_raw", raw_path, sizeof raw_path);
+    sibling_path(path, "_diff", diff_path, sizeof diff_path);
+    int n = o->seeds;
+    linksim_params_t lp[MAX_CH];
+    const char *chname[MAX_CH];
+    int nch = 0;
+    const profile_t *profs[2] = {&PROFILE_TOLL_PLAZA, &PROFILE_HOSPITAL_IMAGING};
+    for (int c = 0; c < 2; c++, nch++) {
+        base_params(o, &lp[nch]);
+        profile_channel(profs[c], &lp[nch]);
+        chname[nch] = profs[c]->label;
+    }
+    if (o->schedule) {
+        schedule_t sched;
+        if (schedule_parse(o->schedule, &sched) != 0) {
+            fprintf(stderr, "error: bad --schedule '%s'\n", o->schedule);
+            return 2;
+        }
+        base_params(o, &lp[nch]);
+        schedule_to_linksim(&sched, o->model_set, o->model, o->p, &lp[nch]);
+        chname[nch++] = "schedule";
+    }
+    static linksim_result_t res[MAX_CH][N_ROWS][1000];
+    printf("bench --strategies --seeds %d: seeds %llu..%llu, %ld frames per row and seed -> %s\n",
+           n, (unsigned long long)o->seed, (unsigned long long)(o->seed + (uint64_t)n - 1), o->frames, path);
+    FILE *raw = open_csv(raw_path, "strategy,code,channel,seed,frames,success_rate,silent_wrong_rate,"
+                         "retx_per_frame,mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes,goodput");
+    if (!raw) return 1;
+    for (int c = 0; c < nch; c++)
+        for (int i = 0; i < N_ROWS; i++)
+            for (int k = 0; k < n; k++) {
+                linksim_result_t *r = &res[c][i][k];
+                char code[24];
+                lp[c].seed = o->seed + (uint64_t)k;
+                run_row(&lp[c], &STRAT_ROWS[i], r, NULL);
+                row_code_name(&STRAT_ROWS[i], code, sizeof code);
+                fprintf(raw, "%s,%s,%s,%llu,%ld,%.6f,%.6f,%.4f,%.3f,%.3f,%.4f,%ld,%.4f\n",
+                        STRAT_ROWS[i].label, code, chname[c], (unsigned long long)lp[c].seed,
+                        r->frames, r->success_rate, r->silent_wrong_rate, r->retx_per_frame,
+                        r->mean_latency_ms, r->p99_latency_ms, r->mean_code_rate,
+                        r->level_changes, r->goodput);
+            }
+    fclose(raw);
+
+    FILE *csv = open_csv(path, "strategy,code,channel,seeds,frames,success_mean,success_ci95,"
+                         "goodput_mean,goodput_ci95,retx_mean,retx_ci95,p99_mean,p99_ci95");
+    if (!csv) return 1;
+    for (int c = 0; c < nch; c++)
+        for (int i = 0; i < N_ROWS; i++) {
+            stats_ci_t st[N_METRICS];
+            double x[1000];
+            char code[24];
+            for (int m = 0; m < N_METRICS; m++) {
+                for (int k = 0; k < n; k++) x[k] = metric_of(&res[c][i][k], m);
+                st[m] = stats_mean_ci(x, n);
+            }
+            row_code_name(&STRAT_ROWS[i], code, sizeof code);
+            fprintf(csv, "%s,%s,%s,%d,%ld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.4f,%.4f\n",
+                    STRAT_ROWS[i].label, code, chname[c], n, o->frames, st[0].mean, st[0].half,
+                    st[1].mean, st[1].half, st[2].mean, st[2].half, st[3].mean, st[3].half);
+            printf("  %-9s %-10s %-17s success=%.4f+-%.4f goodput=%.4f+-%.4f retx=%.3f+-%.3f p99=%.2f+-%.2f ms\n",
+                   STRAT_ROWS[i].label, code, chname[c], st[0].mean, st[0].half, st[1].mean,
+                   st[1].half, st[2].mean, st[2].half, st[3].mean, st[3].half);
+        }
+    fclose(csv);
+
+    FILE *diff = open_csv(diff_path, "channel,a,b,metric,seeds,mean_diff,ci95,lo,hi,significant");
+    if (!diff) return 1;
+    int ad = find_row(STRAT_ADAPTIVE, CODE_NONE, 4), h8 = find_row(STRAT_HARQ, CODE_RS, 8),
+        h4 = find_row(STRAT_HARQ, CODE_RS, 4);
+    for (int c = 0; c < nch; c++) {
+        write_diffs(diff, chname[c], res[c][ad], res[c][h8], "adaptive", "harq_rs_t8", n);
+        write_diffs(diff, chname[c], res[c][ad], res[c][h4], "adaptive", "harq_rs_t4", n);
+    }
+    fclose(diff);
+    printf("bench: wrote %s, %s, %s (95%% CI: Student t, %d degrees of freedom, t = %.3f)\n",
+           path, raw_path, diff_path, n - 1, stats_t975(n - 1));
+    return 0;
+}
+
 int main(int argc, char **argv) {
     cli_opts_t o;
     cli_defaults(&o);
     int rc = cli_parse(&o, argc, argv);
     if (rc) return rc > 0 ? 0 : 2;
-    if (o.strategies) return run_strategies(&o);
+    if (o.strategies) return o.seeds > 0 ? run_strategies_seeds(&o) : run_strategies(&o);
     int only_code = has_flag(argc, argv, "--code"), only_model = o.model_set;
     const char *path = o.out_path ? o.out_path : "results/bench.csv";
     FILE *csv = fopen(path, "w");

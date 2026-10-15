@@ -54,6 +54,7 @@ typedef struct {
     const char *trace_path;    /* --trace FILE    bench: adaptive level trace CSV */
     const char *jsonl_path;    /* --jsonl FILE    tollgate: live JSON-lines log for the dashboard */
     /* failure injection */
+    int seeds;                 /* --seeds N       bench --strategies: N seeds, mean + 95% CI (0 = off) */
     double corrupt_header;     /* --corrupt-header P  channel: corrupt the header of a DATA packet w.p. P */
 } cli_opts_t;
 

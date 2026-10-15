@@ -53,6 +53,7 @@ CODE    ?= hamming74
 CCOUNT  ?= 1000
 FRAMES  ?= 5000
 SCHEDULE ?= toll:2000,hospital:2000,toll:2000
+SEEDS   ?= 20
 ASCHED  ?= toll:60,hospital:80,toll:100
 
 .PHONY: all test sanitize unit-test integration-test demo demo-hospital demo-arq demo-harq demo-adaptive dashboard compare bench plots clean
@@ -135,6 +136,8 @@ bench: all
 		--trace results/adaptive_trace.csv --out results/bench_strategy.csv
 	for r in 5 20 50; do ./bin/bench --strategies --schedule $(SCHEDULE) --frames $(FRAMES) \
 		--seed $(SEED) --rtt-ms $$r --out results/bench_rtt_$$r.csv >/dev/null || exit 1; done
+	./bin/bench --strategies --seeds $(SEEDS) --schedule $(SCHEDULE) --frames $(FRAMES) --seed $(SEED) \
+		--out results/bench_strategy_seeds.csv | tail -1
 
 plots:
 	$(PYTHON) tools/plot.py results/bench.csv
@@ -142,6 +145,7 @@ plots:
 	@if [ -f results/bench_strategy.csv ]; then $(PYTHON) tools/plot.py results/bench_strategy.csv; fi
 	@if [ -f results/adaptive_trace.csv ]; then $(PYTHON) tools/plot.py results/adaptive_trace.csv; fi
 	@if [ -f results/bench_rtt_5.csv ]; then $(PYTHON) tools/plot.py results/bench_rtt_5.csv results/bench_rtt_20.csv results/bench_rtt_50.csv; fi
+	@if [ -f results/bench_strategy_seeds.csv ]; then $(PYTHON) tools/plot.py results/bench_strategy_seeds.csv; fi
 
 # AddressSanitizer + UndefinedBehaviorSanitizer: separate build tree, every finding is fatal and
 # also written to build/asan/logs/ (background processes of the integration tests included).

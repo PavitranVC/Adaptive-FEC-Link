@@ -71,22 +71,29 @@ tollgate -> vehicle on UDP 9002. The adaptive controller climbs a code ladder (u
 Hamming(7,4) -> BCH(15,7) -> BCH(31,16) -> RS t=4 -> RS t=8) using the receiver's sliding-window
 statistics, with hysteresis, and falls back to HARQ on CRC failure.
 
-On a channel that switches toll -> hospital -> toll (`make bench`, 5000 frames, RTT 20 ms).
-Goodput = correctly delivered payload bits / all transmitted bits (parity + retransmissions).
+On a channel that switches toll -> hospital -> toll (`make bench`, 5000 frames per run, RTT 20 ms),
+**mean of 20 seeds (42..61) +- 95% confidence interval** (Student t, 19 degrees of freedom;
+`results/bench_strategy_seeds.csv`). Goodput = correctly delivered payload bits / all transmitted
+bits (parity + retransmissions).
 
 | strategy | correct | goodput | code rate | retx / frame | p99 latency |
 |---|---|---|---|---|---|
-| FEC RS t=8 (no retransmission) | 98.02% | 0.490 | 0.500 | 0 | 12 ms |
-| Stop-and-Wait ARQ (uncoded) | 81.94% | 0.294 | 1.000 | 1.78 | 94 ms |
-| Hybrid ARQ, BCH(31,16) | 99.40% | 0.428 | 0.516 | 0.20 | 76 ms |
-| Hybrid ARQ, RS t=8 (strongest code) | 100.00% | 0.490 | 0.500 | 0.02 | 33 ms |
-| **Hybrid ARQ, RS t=4** | **100.00%** | **0.612** | 0.667 | 0.09 | 32 ms |
-| Adaptive ladder | 99.94% | 0.505 | 0.547 | 0.08 | 33 ms |
+| FEC RS t=8 (no retransmission) | 98.17 +- 0.10% | 0.491 +- 0.001 | 0.500 | 0 | 12 ms |
+| Stop-and-Wait ARQ (uncoded) | 82.44 +- 0.28% | 0.296 +- 0.002 | 1.000 | 1.78 +- 0.01 | 94 ms |
+| Hybrid ARQ, BCH(31,16) | 99.32 +- 0.06% | 0.428 +- 0.001 | 0.516 | 0.196 +- 0.002 | 76 ms |
+| Hybrid ARQ, RS t=8 (strongest code) | 100.00% | 0.491 +- 0.001 | 0.500 | 0.018 +- 0.001 | 33 ms |
+| **Hybrid ARQ, RS t=4** | **99.998 +- 0.003%** | **0.613 +- 0.001** | 0.667 | 0.088 +- 0.002 | **42 +- 5 ms** (32 or 54 ms, see below) |
+| Adaptive ladder | 99.95 +- 0.01% | 0.504 +- 0.002 | 0.543 | 0.069 +- 0.002 | 33 ms |
 
-Honest reading: adaptive matches the strongest code's latency and almost its reliability, but
-saves only ~3% overhead (goodput 0.505 vs 0.490), and fixed HARQ + RS t=4 beats it on every
-metric. The ladder's "cheap" rungs (Hamming 0.571, BCH 0.449/0.516) have a *lower* code rate than
-RS t=4 (0.667), so stepping down in quiet periods does not save bits. See `results/goodput_vs_success.png`.
+Honest reading (multi-seed, paired differences on the same seeds): adaptive's goodput advantage
+over always-RS t=8 is real but small: +0.013 +- 0.002 (+2.7%), at 0.05 percentage points lower
+success. Fixed HARQ + RS t=4 has clearly the best goodput (+0.108 over adaptive) and the best
+reliability, but it is **not** better on every metric (the single-seed run said so): adaptive needs
+fewer retransmissions (0.069 vs 0.088 per frame) and has the lower p99 latency. RS t=4's p99 is
+bimodal across seeds - 32.4 ms in 11 seeds, 53.6 ms in 9 - because about 1% of its frames need a
+second retransmission; seed 42 happened to land on 32 ms. The ladder's "cheap" rungs (Hamming
+0.571, BCH 0.449/0.516) have a *lower* code rate than RS t=4 (0.667), so stepping down in quiet
+periods does not save bits. See `results/goodput_vs_success_ci.png` and `results/goodput_vs_success.png`.
 
 ![adaptive level](results/adaptive_level.png)
 

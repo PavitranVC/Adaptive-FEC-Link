@@ -104,6 +104,18 @@ TEST(failure_injection_flags) {
     CHECK(parse(&o, 3, bad) != 0);
 }
 
+TEST(seeds_flag) {
+    cli_opts_t o;
+    cli_defaults(&o);
+    CHECK_EQ_INT(o.seeds, 0);                       /* default: single-seed behaviour */
+    const char *argv[] = {"x", "--strategies", "--seeds", "20"};
+    CHECK_EQ_INT(parse(&o, 4, argv), 0);
+    CHECK_EQ_INT(o.seeds, 20);
+    fprintf(stderr, "    (1 error message expected below)\n");
+    const char *bad[] = {"x", "--seeds", "1"};       /* a CI needs at least 2 seeds */
+    CHECK(parse(&o, 3, bad) != 0);
+}
+
 TEST(ports) {
     const char *argv[] = {"x", "--channel-port", "19000", "--tollgate-port", "19001"};
     cli_opts_t o;
@@ -119,6 +131,7 @@ int main(void) {
     RUN(rejects_bad_input);
     RUN(week2_flags);
     RUN(failure_injection_flags);
+    RUN(seeds_flag);
     RUN(ports);
     return TEST_REPORT();
 }

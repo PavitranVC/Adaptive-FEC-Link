@@ -24,6 +24,7 @@ Final polish on `final-polish`, fast-forwarded into `main`.
 | Polish 3 RTT sensitivity 5/20/50 ms, `results/rtt_sensitivity.png` | done |
 | Overnight A1 Failure injection: `--corrupt-header P`, `tests/test_packet.c`, `tests/test_failure.sh`, header experiment | done - 3 real bugs fixed (see DECISIONS.md) |
 | Overnight A2 `make sanitize` (ASan + UBSan, all tests) + `tests/test_fuzz.c` (packet/feedback/schedule parsers) | done - 1 real bug fixed (RS decoder read uninitialized memory on failure) |
+| Overnight A3 `bench --strategies --seeds N` (mean + 95% CI, Student t), paired differences, `results/goodput_vs_success_ci.png` | done - see answers below |
 
 ## Test status
 
@@ -42,9 +43,21 @@ The adaptive controller does NOT give "the strongest code's reliability at clear
 overhead". On the toll -> hospital -> toll schedule (5000 frames): adaptive 99.94% correct,
 goodput 0.505, p99 33 ms; always-strongest HARQ + RS t=8 100%, goodput 0.490, p99 33 ms (only ~3%
 more overhead than adaptive); fixed HARQ + RS t=4 100%, goodput 0.612, p99 32 ms - better than
-adaptive on every metric. Reason: the ladder's lower rungs have lower code rates than RS t=4, so
+adaptive on every metric (single seed; **corrected by the 20-seed run below**: RS t=4 wins
+goodput and success, adaptive wins retransmissions and p99). Reason: the ladder's lower rungs have lower code rates than RS t=4, so
 stepping down saves nothing. What adaptive does show: it reacts within ~80 frames to the
 hospital burst and never flaps (tests + `results/adaptive_level.png`). See DECISIONS.md.
+
+## Multi-seed answers (overnight task 3, 20 seeds, scheduled channel)
+
+- **Is adaptive's goodput advantage over HARQ + RS t=8 outside the confidence interval? Yes.**
+  Paired difference +0.0133 +- 0.0024 (0.504 vs 0.491); it is small (+2.7%) and adaptive's
+  success is 0.05 percentage points lower (99.95% vs 100.00%), also outside the CI.
+- **Is HARQ + RS t=4 really better than adaptive on every metric? No.** It is clearly better on
+  goodput (0.613 vs 0.504) and success (99.998% vs 99.95%), but adaptive has fewer
+  retransmissions/frame (0.069 vs 0.088) and a lower p99 latency (33.2 ms vs 42 +- 5 ms; RS t=4's
+  p99 is 32.4 ms in 11 seeds and 53.6 ms in 9 - seed 42 was a lucky one). The README table was
+  updated to the 20-seed means because of that p99 and the "every metric" claim.
 
 ## Known issues / limitations
 
