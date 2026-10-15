@@ -25,6 +25,7 @@ Final polish on `final-polish`, fast-forwarded into `main`.
 | Overnight A1 Failure injection: `--corrupt-header P`, `tests/test_packet.c`, `tests/test_failure.sh`, header experiment | done - 3 real bugs fixed (see DECISIONS.md) |
 | Overnight A2 `make sanitize` (ASan + UBSan, all tests) + `tests/test_fuzz.c` (packet/feedback/schedule parsers) | done - 1 real bug fixed (RS decoder read uninitialized memory on failure) |
 | Overnight A3 `bench --strategies --seeds N` (mean + 95% CI, Student t), paired differences, `results/goodput_vs_success_ci.png` | done - see answers below |
+| Overnight A4 NEW experiment: all-RS adaptive ladder (`--ladder rs`), pre-registered in DECISIONS.md | done - hypothesis HELD (goodput 0.584 vs 0.504 mixed / 0.491 RS t=8, success 99.999%); still below fixed HARQ + RS t=4 (0.613) |
 
 ## Test status
 
@@ -58,6 +59,14 @@ hospital burst and never flaps (tests + `results/adaptive_level.png`). See DECIS
   retransmissions/frame (0.069 vs 0.088) and a lower p99 latency (33.2 ms vs 42 +- 5 ms; RS t=4's
   p99 is 32.4 ms in 11 seeds and 53.6 ms in 9 - seed 42 was a lucky one). The README table was
   updated to the 20-seed means because of that p99 and the "every metric" claim.
+
+## All-RS ladder experiment (overnight task 4, NEW experiment, pre-registered)
+
+Hypothesis held on the scheduled channel (20 seeds): goodput 0.584 +- 0.004 vs mixed adaptive
+0.504 (paired +0.080 +- 0.005) and HARQ + RS t=8 0.491 (paired +0.093 +- 0.004); success 99.999%
+vs 100.000% (within 0.5 pp). Not shown: it does not beat fixed HARQ + RS t=4 on goodput (0.584 vs
+0.613; ties on toll alone, loses on hospital), only on retransmissions and p99 latency.
+`results/ladder_rs_experiment.png`; numbers and criterion in DECISIONS.md.
 
 ## Known issues / limitations
 

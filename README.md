@@ -95,6 +95,14 @@ second retransmission; seed 42 happened to land on 32 ms. The ladder's "cheap" r
 0.571, BCH 0.449/0.516) have a *lower* code rate than RS t=4 (0.667), so stepping down in quiet
 periods does not save bits. See `results/goodput_vs_success_ci.png` and `results/goodput_vs_success.png`.
 
+**New experiment (pre-registered, not a fix): an all-RS ladder** (`--ladder rs`: RS t=1, 2, 4, 6, 8,
+code rates 0.89 .. 0.50, same controller and thresholds, same 20 seeds). The hypothesis "reaches
+HARQ + RS t=8 reliability at clearly higher goodput than the current ladder" **held**: success
+99.999% (vs 100.000% for RS t=8), goodput 0.584 +- 0.004 vs 0.504 (mixed ladder) and 0.491 (RS t=8),
+paired CIs well above 0. It still does **not** beat fixed HARQ + RS t=4 on goodput (0.613); it wins
+on retransmissions and p99 latency. Default stays `--ladder mixed`. See `results/ladder_rs_experiment.png`
+and DECISIONS.md (task 4).
+
 ![adaptive level](results/adaptive_level.png)
 
 Demos: `make demo-arq`, `make demo-harq`, `make demo-adaptive`, `make dashboard` (live web page).

@@ -37,3 +37,11 @@ outputs -> commit `phaseN: <summary>` -> push.
       longer than the code can handle, header corruption experiment).
 - [ ] Final report plots (both profiles, all codes, ARQ vs FEC vs HARQ vs adaptive).
 - [ ] *Optional stretch*: LDPC with a bit-flipping decoder.
+
+## Overnight A (branch `overnight-a`)
+
+- [x] Task 1: failure injection (`--corrupt-header`, malformed/truncated/duplicate packets, lost END,
+      port in use, over-long bursts, 100% feedback loss) + header-corruption experiment.
+- [x] Task 2: `make sanitize` (ASan + UBSan, all tests) + seeded fuzz test of the parsers.
+- [x] Task 3: `bench --strategies --seeds N` (mean + 95% CI), paired differences, CI plot.
+- [x] Task 4: all-RS ladder experiment (`--ladder rs`), pre-registered, reported.

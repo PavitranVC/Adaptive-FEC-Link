@@ -363,3 +363,31 @@ Written and committed BEFORE any code for it was written or any run was made.
   toll:2000, 5000 frames, seeds 42..61 (`--seeds 20 --seed 42`). Selected with `--ladder rs`;
   default `--ladder mixed` must leave every existing result unchanged. The toll-only and
   hospital-only channels are reported too, but the criterion is judged on the scheduled channel.
+- **RESULT (run once, after the pre-registration commit 955da8c; nothing tuned):
+  the hypothesis HOLDS on the scheduled channel.** 20 seeds, mean +- 95% CI
+  (`make bench` -> `results/bench_ladder_rs_seeds*.csv`, plot `results/ladder_rs_experiment.png`):
+
+  | strategy | success | goodput | retx / frame | p99 latency | mean code rate |
+  |---|---|---|---|---|---|
+  | adaptive, **all-RS ladder** | 99.999 +- 0.002% | **0.584 +- 0.004** | 0.055 +- 0.003 | 33.0 +- 0.1 ms | 0.624 |
+  | adaptive, mixed ladder (today) | 99.949 +- 0.009% | 0.504 +- 0.002 | 0.069 +- 0.002 | 33.2 ms | 0.543 |
+  | HARQ + RS t=8 | 100.000% | 0.491 +- 0.0005 | 0.018 +- 0.001 | 33.2 ms | 0.500 |
+  | HARQ + RS t=4 | 99.998 +- 0.003% | 0.613 +- 0.001 | 0.088 +- 0.002 | 42 +- 5 ms | 0.667 |
+
+  Criterion 1 (goodput, paired CI above 0): all-RS minus mixed adaptive **+0.0799 +- 0.0050**
+  ([0.075, 0.085]); all-RS minus HARQ + RS t=8 **+0.0931 +- 0.0038** ([0.089, 0.097]); the unpaired
+  CIs do not overlap either. -> met. Criterion 2 (success within 0.5 pp of HARQ + RS t=8):
+  99.999% vs 100.000%, difference -0.001 +- 0.002 pp (CI includes 0) -> met. The all-RS ladder is
+  even slightly MORE reliable than the mixed ladder (+0.05 pp), with fewer retransmissions
+  (-0.014/frame) and half the level changes (4.4 vs 8.6 per run).
+- **What it does NOT show (reported as clearly):** the all-RS adaptive ladder still has LOWER
+  goodput than simply always using HARQ + RS t=4: -0.028 +- 0.004 on the scheduled channel
+  (0.584 vs 0.613), and also on hospital alone (0.499 vs 0.559); on toll alone they tie
+  (0.643 vs 0.644 - the controller sits on RS t=4 because RS t=2 cannot cope with BSC p = 0.01).
+  Adaptive's advantages over fixed RS t=4 are fewer retransmissions (-0.033/frame) and a lower
+  p99 latency (-9 +- 5 ms), not goodput. So: the ladder design was the main reason adaptive lost
+  (decision #12/final-polish analysis confirmed), but on this channel an adaptive controller
+  still does not beat the best fixed code on goodput. This is a NEW experiment, not a fix: the
+  default ladder stays `mixed` so every earlier result and demo is unchanged.
+- Limitation: the live dashboard labels levels with the mixed ladder's names; with `--ladder rs`
+  the level NUMBERS are right but the axis labels are not (the tollgate log has the code name).

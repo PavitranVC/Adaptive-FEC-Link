@@ -4,8 +4,8 @@
 usage: python3 tools/plot.py results/bench.csv [--suffix _hospital] [--outdir results]
        python3 tools/plot.py results/bench_strategy.csv    (strategy comparison, week 2)
        python3 tools/plot.py results/adaptive_trace.csv    (adaptive code level over time)
-       python3 tools/plot.py results/bench_strategy_seeds.csv [more *_seeds.csv]
-                                                           (multi-seed means + 95% CI error bars)
+       python3 tools/plot.py results/bench_strategy_seeds.csv  (multi-seed means + 95% CI error bars)
+       python3 tools/plot.py results/bench_ladder_rs_seeds.csv (all-RS ladder experiment)
 
 Writes PNGs into results/:
   success_vs_p_bsc<suffix>.png      frame success rate vs flip probability p (BSC), per code
@@ -253,7 +253,7 @@ def ci_plot(paths, outdir, channel="schedule"):
             for r in sorted(pts, key=lambda r: -r["goodput_mean"]):
                 x, y = r["success_mean"], r["goodput_mean"]
                 for g in groups:
-                    if abs(g[0] - x) < 0.008 and abs(g[1] - y) < 0.03:
+                    if abs(g[0] - x) < 0.008 and abs(g[1] - y) < 0.02:
                         g[2].append(ci_name(r))
                         break
                 else:
@@ -290,10 +290,14 @@ def ci_plot(paths, outdir, channel="schedule"):
         if any(r["code"] == code for r in rows):
             axes[0].plot([], [], marker=mk, markersize=12, linestyle="none", color=col, label=name)
     axes[0].legend(frameon=False, fontsize=9, loc="upper left", labelcolor=TEXT)
-    fig.suptitle(f"Goodput vs reliability on the scheduled channel (toll -> hospital -> toll), "
-                 f"mean of {seeds} seeds, 95% CI (Student t)", color=TEXT, x=0.01, ha="left")
+    experiment = any(r["code"] == "ladder_rs" for r in rows)
+    title = (f"NEW EXPERIMENT (pre-registered): all-RS adaptive ladder vs current ladder and fixed HARQ, "
+             f"scheduled channel, {seeds} seeds, 95% CI" if experiment else
+             f"Goodput vs reliability on the scheduled channel (toll -> hospital -> toll), "
+             f"mean of {seeds} seeds, 95% CI (Student t)")
+    fig.suptitle(title, color=TEXT, x=0.01, ha="left")
     fig.tight_layout(rect=(0, 0, 1, 0.95))
-    out = os.path.join(outdir, "goodput_vs_success_ci.png")
+    out = os.path.join(outdir, "ladder_rs_experiment.png" if experiment else "goodput_vs_success_ci.png")
     fig.savefig(out, dpi=130)
     plt.close(fig)
     return out

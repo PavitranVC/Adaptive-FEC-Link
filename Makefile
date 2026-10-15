@@ -138,6 +138,8 @@ bench: all
 		--seed $(SEED) --rtt-ms $$r --out results/bench_rtt_$$r.csv >/dev/null || exit 1; done
 	./bin/bench --strategies --seeds $(SEEDS) --schedule $(SCHEDULE) --frames $(FRAMES) --seed $(SEED) \
 		--out results/bench_strategy_seeds.csv | tail -1
+	./bin/bench --strategies --seeds $(SEEDS) --ladder rs --schedule $(SCHEDULE) --frames $(FRAMES) \
+		--seed $(SEED) --out results/bench_ladder_rs_seeds.csv | tail -1
 
 plots:
 	$(PYTHON) tools/plot.py results/bench.csv
@@ -146,6 +148,7 @@ plots:
 	@if [ -f results/adaptive_trace.csv ]; then $(PYTHON) tools/plot.py results/adaptive_trace.csv; fi
 	@if [ -f results/bench_rtt_5.csv ]; then $(PYTHON) tools/plot.py results/bench_rtt_5.csv results/bench_rtt_20.csv results/bench_rtt_50.csv; fi
 	@if [ -f results/bench_strategy_seeds.csv ]; then $(PYTHON) tools/plot.py results/bench_strategy_seeds.csv; fi
+	@if [ -f results/bench_ladder_rs_seeds.csv ]; then $(PYTHON) tools/plot.py results/bench_ladder_rs_seeds.csv; fi
 
 # AddressSanitizer + UndefinedBehaviorSanitizer: separate build tree, every finding is fatal and
 # also written to build/asan/logs/ (background processes of the integration tests included).
