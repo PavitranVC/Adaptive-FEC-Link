@@ -9,6 +9,35 @@ Format: what was chosen / the alternative / why.
   only the FEC-coded payload is. Alternative: corrupt the header too and protect it with its own
   code. Why: the assignment fixes this; it isolates the comparison of payload codes. A header
   corruption experiment is listed as week-2 failure-injection work.
+  **Overnight result (header-corruption experiment, `channel --corrupt-header P`):** a corrupted
+  packet gets 1-4 random bit flips (uniform) in its 16-byte header; payload noise is unchanged
+  (separate RNG stream); END packets are not corrupted. `sh tools/header_experiment.sh` (real UDP
+  pipeline, toll profile, RS t=4, seed 42, 2000 frames, reference run for the true seq -> tag map):
+
+  | strategy | P | headers corrupted | delivered | failed | misrouted | lost | tollgate claims CORRECT |
+  |---|---|---|---|---|---|---|---|
+  | fec  | 0    | 0   | 1929 | 71 | 0  | 0   | 1929 |
+  | fec  | 0.01 | 24  | 1906 | 71 | 3  | 20  | 1909 |
+  | fec  | 0.05 | 100 | 1835 | 69 | 13 | 83  | 1845 |
+  | fec  | 0.2  | 396 | 1558 | 62 | 51 | 329 | 1599 |
+  | harq | 0    | 0   | 2000 | 0  | 0  | 0   | 2000 |
+  | harq | 0.01 | 24  | 1997 | 1  | 2  | 0   | 2000 |
+  | harq | 0.05 | 108 | 1988 | 2  | 9  | 1   | 2000 |
+  | harq | 0.2  | 551 | 1960 | 2  | 28 | 10  | 2003 |
+
+  (`failed` = arrived under its own seq but never CORRECT; with fec that is ordinary payload
+  noise, identical to P = 0.) Reading: with plain FEC **almost every corrupted header costs one
+  frame**: at P = 0.01, 23 of 24 (20 lost + 3 misrouted = 1.15% of all frames), at P = 0.05,
+  96 of 100 (83 lost + 13 misrouted = 4.8%). Most are dropped as malformed/invalid (magic,
+  version, type, nbits, code fields); a flipped seq bit *misroutes* the frame (the ID is read,
+  but filed under another seq) and can make the tollgate discard the real owner of that seq as
+  a "duplicate". HARQ hides most of it (a dropped frame is simply retransmitted): 0.15% / 0.6%
+  of frames are lost or misrouted at P = 0.01 / 0.05. But the tollgate **cannot see misrouting**:
+  its summary over-reports (2003 "correct" frames out of 2000 sent at P = 0.2). The parts that do
+  not depend on the header (decoding, CRC, classification) never crashed. Conclusion: keeping
+  the header out of the noise (decision #1) is a real assumption, worth ~1 lost frame per
+  corrupted header without retransmission; a real link would protect the header (e.g. its own
+  CRC-16 or a strong short code) - listed as a next step, not done (it changes the wire format).
 - Library + three thin programs: all coding logic lives in `build/libfeclink.a` so the in-process
   benchmark and the UDP pipeline run exactly the same code.
 - Bits are kept one-per-byte inside the coding layer (clarity over speed); packed only on the wire.
@@ -222,3 +251,36 @@ Format: what was chosen / the alternative / why.
   p99 latency grows linearly with RTT for every feedback strategy (ARQ 27 -> 94 -> 229 ms; HARQ +
   RS t=4 / t=8 and adaptive 11 -> 33 -> 78 ms), while plain FEC only pays one-way propagation
   (RS t=8: 4 -> 12 -> 27 ms). Rankings do not change with RTT; goodput does not depend on RTT.
+
+## Overnight A - task 1: failure injection
+
+What happens in each injected failure (all covered by `tests/test_packet.c` and
+`tests/test_failure.sh`, which `make test` runs; `build/tests/inject` sends the bad packets):
+
+| Case | What the program does | Exit / summary |
+|---|---|---|
+| Random garbage, any length 1-300 bytes | `ignoring malformed packet (N bytes)`, dropped | keeps running; `malformed=` in summary |
+| **Empty (0-byte) datagram** | was read as "idle timeout" -> tollgate/channel STOPPED (bug, fixed: `net_recv` returns `NET_EMPTY`); now logged as malformed | keeps running |
+| Truncated packet (every length tested), trailing bytes | length must equal 16 + B (+ 16 + B with sidecar), else malformed | keeps running |
+| Wrong magic / version / type | malformed (all 256 values of each byte tested) | keeps running |
+| Absurd nbits (65535, > 2048) | malformed, never read past the buffer | keeps running |
+| Unknown code id / impossible rs_t, interleave 0, size mismatch, strategy > 3 | `dropping frame seq=N with unknown code/size/strategy` | `invalid=` in summary |
+| ... same packet used to **steal the seq** (bug, fixed) | an invalid packet used to occupy its seq first, so the later VALID copy was thrown away as a duplicate and the bogus packet counted as a DETECTED_FAIL frame; validation now happens before any seq bookkeeping | |
+| Duplicate seq (same attempt), late copy of an older seq | ignored as duplicate (decoded once) | `duplicates=` in summary |
+| END lost | tollgate stops after `--idle-timeout-ms` (counted from the first packet) and prints the summary with `received N (END not seen)` | exit 0 |
+| UDP port already in use | **bug, fixed**: `SO_REUSEADDR` let a 2nd tollgate/channel/vehicle bind the same UDP port on Linux and silently share/steal packets; removed (UDP has no TIME_WAIT). Now: `error: cannot bind UDP 127.0.0.1:P: Address already in use (is another instance running?)` | exit 1 |
+| Burst longer than any code (L = 4096 > frame) for Hamming(7,4), BCH(31,16), RS t=8 | every frame DETECTED_FAIL (CRC catches it), 0 SILENT_WRONG, no crash | exit 0 |
+| Feedback lost 100% (`--fb-drop 1`), harq and arq | vehicle times out, retransmits, prints `GIVING UP after max-retries+1 transmission(s)` for every frame | exit 0 |
+| Garbage on the vehicle's feedback port | `ignoring malformed feedback (N bytes)`, keeps waiting for the real ACK/NAK | all frames still delivered |
+| Header corruption (`--corrupt-header P`) | see decision #1 above: dropped as malformed/invalid, or misrouted by a flipped seq | never crashed (P up to 0.3 tested) |
+
+Known limitations found (not fixed - design changes, see PROGRESS.md "Open problems"):
+- A misrouted seq (corrupted header) makes the tollgate count a phantom frame, and with HARQ the
+  real owner of the stolen seq can be rejected as a "late copy" on every retransmission until the
+  vehicle gives up. The tollgate summary over-counts CORRECT in that case. Fix = header CRC.
+- The tollgate's duplicate filter keeps only seq mod 65536 (already listed in PROGRESS.md).
+- 🔀 Header corruption flips 1-4 random distinct bits (uniform) of the 16-byte header, END packets
+  are exempt. Alternative: flip each header bit with the payload BER. Why: a per-packet event
+  probability P is easy to explain and sweep, and END loss is tested separately (idle timeout).
+- Test-script bug fixed on the way: `check "x" [ a ] && [ b ]` only checked `a` (the `&&` ran
+  outside `check`); one such line in `tests/test_integration.sh` now uses `eval`.

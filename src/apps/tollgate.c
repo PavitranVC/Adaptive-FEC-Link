@@ -39,6 +39,7 @@ typedef struct {
     long sent;                 /* from the END packet, -1 if unknown */
     long received, duplicates; /* received = distinct frames (seq numbers) */
     long transmissions;        /* every decoded transmission, incl. retransmissions */
+    long malformed, invalid;   /* dropped: unparsable packets / parsable but impossible header */
     long cls[4];               /* final class per distinct frame */
     int strategy;              /* strategy seen in the headers */
     /* the frame currently being (re)transmitted */
@@ -230,6 +231,14 @@ static void finalize_frame(stats_t *st) {
     st->cur_valid = 0;
 }
 
+/* A parsable header can still be impossible (unknown code id, size that does not match the
+ * code, unknown strategy) - e.g. after `channel --corrupt-header`. */
+static int header_valid(const packet_t *p) {
+    fec_config_t cfg;
+    return p->strategy <= STRAT_ADAPTIVE &&
+           rx_config(p->code, p->rs_t, p->interleave, p->nbits, &cfg) == 0;
+}
+
 static double pct(long a, long b) { return b > 0 ? 100.0 * (double)a / (double)b : 0.0; }
 
 static void print_summary(const stats_t *st) {
@@ -259,6 +268,9 @@ static void print_summary(const stats_t *st) {
     term_say(TAG, COL, "bits            : flipped %llu, corrected %llu", st->flipped, st->corrected);
     term_say(TAG, COL, "decode latency  : mean %.2f us, max %.2f us",
              st->transmissions ? st->lat_sum / (double)st->transmissions : 0.0, st->lat_max);
+    if (st->malformed || st->invalid || (st->duplicates && st->strategy == STRAT_FEC))
+        term_say(TAG, COL, "%sdropped         : %ld malformed packets, %ld invalid headers, %ld duplicates%s",
+                 term_c(T_YELLOW), st->malformed, st->invalid, st->duplicates, term_c(T_RESET));
     if (st->strategy > STRAT_FEC)
         term_say(TAG, COL, "strategy %-7s: %ld transmissions (%ld retransmissions), %ld feedback sent, %ld dropped (injected), %ld duplicates ignored",
                  strategy_name((strategy_t)st->strategy), st->transmissions,
@@ -295,6 +307,10 @@ static void write_summary(const char *path, const stats_t *st) {
         fprintf(f, "retransmissions=%ld\n", st->transmissions - n);
         fprintf(f, "feedback_dropped=%ld\n", st->fb_dropped);
     }
+    /* failure injection: only written when something was dropped (normal runs unchanged) */
+    if (st->malformed) fprintf(f, "malformed=%ld\n", st->malformed);
+    if (st->invalid) fprintf(f, "invalid=%ld\n", st->invalid);
+    if (st->duplicates) fprintf(f, "duplicates=%ld\n", st->duplicates);
     fclose(f);
 }
 
@@ -331,13 +347,24 @@ int main(int argc, char **argv) {
     while (!stop_requested()) {
         long n = net_recv(fd, wire, sizeof wire, got_first && o.idle_timeout_ms ? o.idle_timeout_ms : -1);
         if (n == 0) { term_say(TAG, COL, "idle timeout - stopping"); break; }
+        if (n == NET_EMPTY) {
+            st.malformed++;
+            term_say(TAG, COL, "ignoring malformed packet (0 bytes)");
+            continue;
+        }
         if (n < 0) continue;
         if (packet_parse(wire, (size_t)n, &pkt) != 0) {
+            st.malformed++;
             term_say(TAG, COL, "ignoring malformed packet (%ld bytes)", n);
             continue;
         }
         got_first = 1;
         if (pkt.type == PKT_END) { st.sent = pkt.seq; break; }
+        if (!header_valid(&pkt)) {      /* BEFORE the seq bookkeeping: must not claim a seq */
+            st.invalid++;
+            term_say(TAG, COL, "dropping frame seq=%u with unknown code/size/strategy", pkt.seq);
+            continue;
+        }
         if (st.cur_valid && pkt.seq == st.cur_seq) {
             if (pkt.attempt <= st.cur_attempt) { st.duplicates++; continue; }  /* same copy again */
         } else if (seen[pkt.seq & 0xFFFF] && pkt.seq < 0x10000) {

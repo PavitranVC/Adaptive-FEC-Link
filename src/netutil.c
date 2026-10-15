@@ -32,8 +32,10 @@ int net_udp_bind(const char *host, int port) {
     if (make_addr(host, port, &a)) return -1;
     int fd = net_udp_socket();
     if (fd < 0) return -1;
-    int one = 1, big = 1 << 20;
-    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+    /* No SO_REUSEADDR: for UDP on Linux it lets a SECOND process bind the same port and
+     * silently steal packets; without it "port already in use" fails loudly (EADDRINUSE).
+     * UDP has no TIME_WAIT, so a restarted program can rebind at once anyway. */
+    int big = 1 << 20;
     setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &big, sizeof big); /* best effort, may be capped */
     if (bind(fd, (struct sockaddr *)&a, sizeof a) < 0) {
         fprintf(stderr, "error: cannot bind UDP %s:%d: %s (is another instance running?)\n",
@@ -60,6 +62,8 @@ long net_recv(int fd, void *buf, size_t cap, int timeout_ms) {
     if (r == 0) return 0;
     if (r < 0) return -1;
     ssize_t n = recvfrom(fd, buf, cap, 0, NULL, NULL);
+    /* An EMPTY datagram must not look like a timeout (0) - callers would stop. */
+    if (n == 0) return NET_EMPTY;
     return n < 0 ? -1 : (long)n;
 }
 

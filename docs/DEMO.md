@@ -119,6 +119,15 @@ the tollgate prints `-> ACK/NAK` after each frame and `seq=5#1` for retransmissi
 Extra flags: `--rtt-ms` (simulated round trip, default 20), `--timeout-ms` (100),
 `--max-retries` (4), `--fb-drop` (0). With `--strategy fec` (default) nothing changes.
 
+Header corruption (failure injection, breaks decision #1 on purpose): the channel flips 1-4
+random bits in the 16-byte header of 5% of the packets. Receivers log `ignoring malformed packet`
+or `dropping frame ... unknown code/size/strategy` and keep running; the channel prints
+`HEADER CORRUPTED`. `sh tools/header_experiment.sh` measures the cost (see DECISIONS.md #1).
+
+```sh
+sh tools/demo.sh --code rs --corrupt-header 0.05 --count 100 --delay-ms 50
+```
+
 ### Adaptive FEC (week 2, the highlight)
 
 ```sh

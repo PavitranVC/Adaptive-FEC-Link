@@ -53,6 +53,8 @@ typedef struct {
     int strategies;            /* --strategies    bench: strategy comparison mode */
     const char *trace_path;    /* --trace FILE    bench: adaptive level trace CSV */
     const char *jsonl_path;    /* --jsonl FILE    tollgate: live JSON-lines log for the dashboard */
+    /* failure injection */
+    double corrupt_header;     /* --corrupt-header P  channel: corrupt the header of a DATA packet w.p. P */
 } cli_opts_t;
 
 void cli_defaults(cli_opts_t *o);

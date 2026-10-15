@@ -20,7 +20,8 @@
  *  +4  12   true tag ID
  *  +16  B   clean (transmitted) coded bits
  *
- * The header is never corrupted (project assumption, see DECISIONS.md).
+ * The header is never corrupted by default (project assumption, decision #1). The failure-injection
+ * flag `channel --corrupt-header P` breaks that assumption on purpose (packet_corrupt_header).
  */
 #ifndef PACKET_H
 #define PACKET_H
@@ -29,6 +30,7 @@
 #include <stdint.h>
 #include "fec.h"
 #include "frame.h"
+#include "rng.h"
 
 #define PACKET_VERSION 2
 #define PACKET_HEADER_BYTES 16
@@ -64,5 +66,11 @@ size_t packet_serialize(const packet_t *p, uint8_t *buf, size_t cap);
 
 /* Returns 0 on success, -1 on a malformed packet (bad magic/version/type/length). */
 int packet_parse(const uint8_t *buf, size_t len, packet_t *p);
+
+/* Failure injection: flips k DISTINCT random bits of the 16-byte header of a serialized packet,
+ * k uniform in 1..PACKET_HEADER_CORRUPT_MAX. Returns k (0 if len < header size, nothing done).
+ * Payload and sidecar are left alone - the experiment isolates what an unprotected header costs. */
+#define PACKET_HEADER_CORRUPT_MAX 4
+int packet_corrupt_header(uint8_t *buf, size_t len, rng_t *r);
 
 #endif /* PACKET_H */

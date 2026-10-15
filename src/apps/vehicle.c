@@ -81,7 +81,11 @@ static send_action_t await_feedback(int fbfd, const cli_opts_t *o, sender_t *s, 
             return sender_on_timeout(s);
         }
         feedback_t fb;
-        if (n < 0 || feedback_parse(buf, (size_t)n, &fb) != 0) continue;
+        if (n < 0) continue;
+        if (feedback_parse(buf, (size_t)n, &fb) != 0) {
+            if (!o->quiet) term_say(TAG, T_BLUE, "ignoring malformed feedback (%ld bytes)", n);
+            continue;
+        }
         int change = 0;
         send_action_t act = sender_on_feedback(s, &fb, &change);
         announce_level(s, change);

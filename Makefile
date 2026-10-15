@@ -81,14 +81,20 @@ build/tests/%: tests/%.c tests/testlib.h $(LIB)
 	@mkdir -p build/tests
 	$(CC) $(CFLAGS) $< $(LIB) $(LDLIBS) -o $@
 
+# Failure-injection helper (sends malformed UDP packets), used by tests/test_failure.sh
+build/tests/inject: tests/inject.c $(LIB)
+	@mkdir -p build/tests
+	$(CC) $(CFLAGS) $< $(LIB) $(LDLIBS) -o $@
+
 test: unit-test integration-test
 
 unit-test: $(TEST_BINS)
 	@set -e; for t in $(TEST_BINS); do echo "== $$t"; ./$$t; done
 	@echo "All unit tests passed."
 
-integration-test: all
+integration-test: all build/tests/inject
 	@if [ -f tests/test_integration.sh ]; then sh tests/test_integration.sh; fi
+	sh tests/test_failure.sh
 	@if command -v $(PYTHON) >/dev/null 2>&1; then $(PYTHON) tests/test_dashboard.py; fi
 
 demo: all

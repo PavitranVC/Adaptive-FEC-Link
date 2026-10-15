@@ -22,6 +22,7 @@ Final polish on `final-polish`, fast-forwarded into `main`.
 | Polish 1 docs/DEMO.md = single demo guide (setup per OS, venv, troubleshooting, talking script) | done |
 | Polish 2 HARQ + RS t=4/t=8 baselines, goodput metric + plot, honest result tables | done - claim did NOT hold (see below) |
 | Polish 3 RTT sensitivity 5/20/50 ms, `results/rtt_sensitivity.png` | done |
+| Overnight A1 Failure injection: `--corrupt-header P`, `tests/test_packet.c`, `tests/test_failure.sh`, header experiment | done - 3 real bugs fixed (see DECISIONS.md) |
 
 ## Test status
 
@@ -58,6 +59,15 @@ hospital burst and never flaps (tests + `results/adaptive_level.png`). See DECIS
   owns the window); `tools/demo.sh` does that automatically.
 - BER^ ignores failed frames, so it under-estimates on bursty channels (mitigated by the measured
   failure rate and the probe back-off; see DECISIONS.md).
+
+## Open problems
+
+- **Header corruption -> misrouting** (overnight task 1, not fixed: needs a wire-format change).
+  Reproduce: `sh tools/header_experiment.sh 2000` -> `results/header_corruption.csv`. A flipped
+  seq bit files a frame under another seq; the tollgate then counts a phantom frame and, with
+  HARQ, rejects the real owner of that seq as a "late copy" until the vehicle gives up; the
+  summary over-reports CORRECT (2003 of 2000 at P = 0.2). Fix: protect the header with its own
+  CRC-16 (new header version) and drop on mismatch.
 
 ## Exact next step
 

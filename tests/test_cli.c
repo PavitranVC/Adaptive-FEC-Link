@@ -92,6 +92,18 @@ TEST(week2_flags) {
     CHECK(parse(&o, 3, bad) != 0);
 }
 
+TEST(failure_injection_flags) {
+    cli_opts_t o;
+    cli_defaults(&o);
+    CHECK_NEAR(o.corrupt_header, 0.0, 0);           /* default: header never corrupted */
+    const char *argv[] = {"x", "--corrupt-header", "0.05"};
+    CHECK_EQ_INT(parse(&o, 3, argv), 0);
+    CHECK_NEAR(o.corrupt_header, 0.05, 0);
+    fprintf(stderr, "    (1 error message expected below)\n");
+    const char *bad[] = {"x", "--corrupt-header", "2"};
+    CHECK(parse(&o, 3, bad) != 0);
+}
+
 TEST(ports) {
     const char *argv[] = {"x", "--channel-port", "19000", "--tollgate-port", "19001"};
     cli_opts_t o;
@@ -106,6 +118,7 @@ int main(void) {
     RUN(model_defaults_to_profile_model);
     RUN(rejects_bad_input);
     RUN(week2_flags);
+    RUN(failure_injection_flags);
     RUN(ports);
     return TEST_REPORT();
 }

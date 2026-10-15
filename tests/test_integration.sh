@@ -125,7 +125,7 @@ echo "== integration: bench smoke test"
 check "bench ok" [ $? -eq 0 ]
 check "bench csv header" grep -q '^code,model,param,frames,frame_success_rate,detected_fail_rate,silent_wrong_rate,code_rate,mean_decode_us$' results/tmp/bench_smoke.csv
 rows=$(grep -c '^hamming74,' results/tmp/bench_smoke.csv)
-check "bench csv has rows for all 3 models" [ "$rows" -ge 3 ] && grep -q ',burst,' results/tmp/bench_smoke.csv
+check "bench csv has rows for all 3 models" eval '[ "$rows" -ge 3 ] && grep -q ",burst," results/tmp/bench_smoke.csv'
 ./bin/bench --strategies --schedule toll:30,hospital:30 --trace results/tmp/trace_smoke.csv \
     --frames 50 --out results/tmp/bench_strategy_smoke.csv >"$OUT" 2>&1
 check "bench --strategies ok" [ $? -eq 0 ]

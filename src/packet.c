@@ -63,3 +63,17 @@ int packet_parse(const uint8_t *buf, size_t len, packet_t *p) {
     }
     return 0;
 }
+
+int packet_corrupt_header(uint8_t *buf, size_t len, rng_t *r) {
+    if (len < PACKET_HEADER_BYTES) return 0;
+    int k = 1 + (int)rng_below(r, PACKET_HEADER_CORRUPT_MAX);
+    uint8_t hit[8 * PACKET_HEADER_BYTES] = {0};
+    for (int done = 0; done < k;) {
+        uint32_t bit = rng_below(r, 8 * PACKET_HEADER_BYTES);   /* redraw until distinct */
+        if (hit[bit]) continue;
+        hit[bit] = 1;
+        buf[bit / 8] ^= (uint8_t)(0x80u >> (bit % 8));
+        done++;
+    }
+    return k;
+}

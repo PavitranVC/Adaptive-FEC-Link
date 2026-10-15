@@ -33,7 +33,7 @@ outputs -> commit `phaseN: <summary>` -> push.
 - [x] Adaptive controller: receiver feedback steps the code level up/down
       (hamming74 -> bch157 -> bch3116 -> rs ...) with hysteresis.
 - [x] Live Python web dashboard (tollgate --jsonl + tools/dashboard.py, `make dashboard`).
-- [ ] Deliberate failure-injection testing (malformed packets, lost END, port in use, bursts
+- [x] Deliberate failure-injection testing (malformed packets, lost END, port in use, bursts
       longer than the code can handle, header corruption experiment).
 - [ ] Final report plots (both profiles, all codes, ARQ vs FEC vs HARQ vs adaptive).
 - [ ] *Optional stretch*: LDPC with a bit-flipping decoder.

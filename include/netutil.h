@@ -6,7 +6,7 @@
 
 #include <stddef.h>
 
-/* UDP socket bound to host:port (SO_REUSEADDR). Returns fd or -1 (error printed). */
+/* UDP socket bound to host:port. Returns fd or -1 (error printed, e.g. port already in use). */
 int net_udp_bind(const char *host, int port);
 
 /* Unbound UDP socket for sending. Returns fd or -1. */
@@ -16,7 +16,8 @@ int net_udp_socket(void);
 int net_sendto(int fd, const char *host, int port, const void *buf, size_t len);
 
 /* Waits up to timeout_ms (-1 = forever). Returns bytes received (> 0), 0 on timeout,
- * -1 on error or when interrupted by a signal. */
+ * NET_EMPTY for an empty (0-byte) datagram, -1 on error or when interrupted by a signal. */
+#define NET_EMPTY (-2)
 long net_recv(int fd, void *buf, size_t cap, int timeout_ms);
 
 void net_close(int fd);

@@ -9,6 +9,10 @@
  *
  * --schedule "toll:200,hospital:200,toll:200" switches the interference profile after the given
  * number of transmissions (retransmissions included); the last profile then stays in force.
+ *
+ * --corrupt-header P (failure injection, default 0): with probability P a forwarded DATA packet
+ * also gets 1-4 random bit flips in its 16-byte header (drawn from its own RNG stream, so the
+ * payload noise is identical with and without the flag). END packets are never corrupted.
  */
 #include <stdio.h>
 #include <string.h>
@@ -28,6 +32,7 @@
 typedef struct {
     long frames;
     unsigned long long bits, flips;
+    long malformed, hdr_corrupted;
 } channel_stats_t;
 
 typedef struct {               /* the optional profile schedule */
@@ -107,10 +112,20 @@ static int process_data(const cli_opts_t *o, const profile_t *prof, noise_t *ch,
     return 0;
 }
 
-static int forward(int out, const cli_opts_t *o, const packet_t *p) {
+/* hdr_rng != NULL: DATA packet, subject to --corrupt-header. */
+static int forward(int out, const cli_opts_t *o, const packet_t *p, rng_t *hdr_rng,
+                   channel_stats_t *st) {
     uint8_t wire[PACKET_MAX_BYTES];
     size_t len = packet_serialize(p, wire, sizeof wire);
-    return len ? net_sendto(out, o->host, o->tollgate_port, wire, len) : -1;
+    if (len == 0) return -1;
+    if (hdr_rng && o->corrupt_header > 0 && rng_bernoulli(hdr_rng, o->corrupt_header)) {
+        int k = packet_corrupt_header(wire, len, hdr_rng);      /* failure injection */
+        st->hdr_corrupted++;
+        if (!o->quiet)
+            term_say(TAG, COL, "seq=%-4u %sHEADER CORRUPTED (%d bits flipped)%s", p->seq,
+                     term_c(T_RED), k, term_c(T_RESET));
+    }
+    return net_sendto(out, o->host, o->tollgate_port, wire, len);
 }
 
 int main(int argc, char **argv) {
@@ -137,6 +152,8 @@ int main(int argc, char **argv) {
     noise_params_t np = cli_noise_params(&o);
     noise_t ch;
     noise_init(&ch, &np, rng_derive(o.seed, "channel"));
+    rng_t hdr_rng;                       /* separate stream: --corrupt-header never shifts the noise */
+    rng_seed(&hdr_rng, rng_derive(o.seed, "channel-header"));
     char desc[200];
     noise_describe(&np, desc, sizeof desc);
 
@@ -150,32 +167,42 @@ int main(int argc, char **argv) {
              o.host, o.channel_port, o.tollgate_port, o.profile->label, desc);
     if (cs.active) term_say(TAG, COL, "schedule: %s (counted in transmissions)", o.schedule);
 
-    channel_stats_t st = {0, 0, 0};
+    channel_stats_t st = {0, 0, 0, 0, 0};
     int got_first = 0;
     while (!stop_requested()) {
         long n = net_recv(in, wire, sizeof wire, got_first && o.idle_timeout_ms ? o.idle_timeout_ms : -1);
         if (n == 0) { term_say(TAG, COL, "idle timeout - stopping"); break; }
+        if (n == NET_EMPTY) {
+            st.malformed++;
+            term_say(TAG, COL, "ignoring malformed packet (0 bytes)");
+            continue;
+        }
         if (n < 0) continue; /* interrupted: loop re-checks the stop flag */
         if (packet_parse(wire, (size_t)n, &pkt) != 0) {
+            st.malformed++;
             term_say(TAG, COL, "ignoring malformed packet (%ld bytes)", n);
             continue;
         }
         got_first = 1;
         if (pkt.type == PKT_END) break;
         const profile_t *prof = apply_schedule(&o, &cs, &ch, st.frames);
-        if (process_data(&o, prof, &ch, &pkt, mask, log, &st) == 0) forward(out, &o, &pkt);
+        if (process_data(&o, prof, &ch, &pkt, mask, log, &st) == 0) forward(out, &o, &pkt, &hdr_rng, &st);
+        else st.malformed++;
     }
     double ber = st.bits ? (double)st.flips / (double)st.bits : 0.0;
     term_say(TAG, COL, "done: %ld frames, %llu bits flipped of %llu (measured BER %.5f, model BER %.5f)",
              st.frames, st.flips, st.bits, ber, noise_expected_ber(&np));
+    if (o.corrupt_header > 0 || st.malformed)
+        term_say(TAG, COL, "failure injection: header corrupted in %ld of %ld packets (P=%g); %ld malformed packets ignored",
+                 st.hdr_corrupted, st.frames, o.corrupt_header, st.malformed);
     { /* tell the tollgate we are done; sent twice in case one copy is lost */
         packet_t end;
         memset(&end, 0, sizeof end);
         end.type = PKT_END;
         end.seq = pkt.type == PKT_END ? pkt.seq : (uint32_t)st.frames;
-        forward(out, &o, &end);
+        forward(out, &o, &end, NULL, &st);
         sleep_us(20000);
-        forward(out, &o, &end);
+        forward(out, &o, &end, NULL, &st);
     }
     if (log) fclose(log);
     net_close(in);
