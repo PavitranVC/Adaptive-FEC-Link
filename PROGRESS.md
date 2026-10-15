@@ -23,6 +23,7 @@ Final polish on `final-polish`, fast-forwarded into `main`.
 | Polish 2 HARQ + RS t=4/t=8 baselines, goodput metric + plot, honest result tables | done - claim did NOT hold (see below) |
 | Polish 3 RTT sensitivity 5/20/50 ms, `results/rtt_sensitivity.png` | done |
 | Overnight A1 Failure injection: `--corrupt-header P`, `tests/test_packet.c`, `tests/test_failure.sh`, header experiment | done - 3 real bugs fixed (see DECISIONS.md) |
+| Overnight A2 `make sanitize` (ASan + UBSan, all tests) + `tests/test_fuzz.c` (packet/feedback/schedule parsers) | done - 1 real bug fixed (RS decoder read uninitialized memory on failure) |
 
 ## Test status
 

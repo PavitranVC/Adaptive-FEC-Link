@@ -6,6 +6,7 @@
 #
 # Default CODES: "hamming74 bch157". Extra flags are passed to all three programs.
 cd "$(dirname "$0")/.." || exit 1
+BIN=${BIN:-bin}      # make sanitize sets BIN=build/asan/bin
 mkdir -p results/tmp
 CODES=${CODES:-"hamming74 bch157"}
 
@@ -14,13 +15,13 @@ for code in $CODES; do
     sum="results/tmp/compare_$code.txt"
     log="results/tmp/compare_$code.log"
     rm -f "$sum"
-    ./bin/tollgate "$@" --code "$code" --quiet --no-color --summary-file "$sum" >"$log" 2>&1 &
+    ./$BIN/tollgate "$@" --code "$code" --quiet --no-color --summary-file "$sum" >"$log" 2>&1 &
     tg=$!
     sleep 0.3
-    ./bin/channel "$@" --code "$code" --quiet --no-color >>"$log" 2>&1 &
+    ./$BIN/channel "$@" --code "$code" --quiet --no-color >>"$log" 2>&1 &
     ch=$!
     sleep 0.3
-    if ! ./bin/vehicle "$@" --code "$code" --quiet --no-color >>"$log" 2>&1; then
+    if ! ./$BIN/vehicle "$@" --code "$code" --quiet --no-color >>"$log" 2>&1; then
         kill "$ch" "$tg" 2>/dev/null
         echo "run for $code failed - see $log" >&2
         cat "$log" >&2

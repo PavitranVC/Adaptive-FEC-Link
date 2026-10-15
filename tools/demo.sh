@@ -6,9 +6,10 @@
 #
 # Output lines are prefixed [VEHICLE] / [CHANNEL] / [TOLLGATE] by the programs themselves.
 cd "$(dirname "$0")/.." || exit 1
+BIN=${BIN:-bin}      # make sanitize sets BIN=build/asan/bin
 mkdir -p results/tmp
 
-for b in bin/tollgate bin/channel bin/vehicle; do
+for b in $BIN/tollgate $BIN/channel $BIN/vehicle; do
     [ -x "$b" ] || { echo "missing $b - run 'make' first" >&2; exit 1; }
 done
 
@@ -20,14 +21,14 @@ cleanup() {
 trap 'cleanup; exit 130' INT TERM
 
 echo "=== Adaptive FEC link demo: tollgate <- channel <- vehicle ($*) ==="
-./bin/tollgate "$@" --show-bits --log results/tmp/tollgate.csv \
+./$BIN/tollgate "$@" --show-bits --log results/tmp/tollgate.csv \
     --summary-file results/tmp/summary.txt &
 TG=$!
 sleep 0.3
-./bin/channel "$@" --log results/tmp/channel.csv &
+./$BIN/channel "$@" --log results/tmp/channel.csv &
 CH=$!
 sleep 0.3
-./bin/vehicle "$@"
+./$BIN/vehicle "$@"
 VRC=$?
 if [ "$VRC" -ne 0 ]; then
     echo "vehicle failed (exit $VRC) - stopping the other processes" >&2

@@ -284,3 +284,29 @@ Known limitations found (not fixed - design changes, see PROGRESS.md "Open probl
   probability P is easy to explain and sweep, and END loss is tested separately (idle timeout).
 - Test-script bug fixed on the way: `check "x" [ a ] && [ b ]` only checked `a` (the `&&` ran
   outside `check`); one such line in `tests/test_integration.sh` now uses `eval`.
+
+## Overnight A - task 2: sanitizers and fuzzing
+
+- `make sanitize` re-runs this Makefile with `BUILD=build/asan BINDIR=build/asan/bin` and
+  `-O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all` (CFLAGS passed through the
+  environment so `-std=c11 ...` is kept), then runs ALL unit tests and both integration scripts
+  against the sanitized binaries (scripts honour `BIN=`; default `bin`). ASan/LSan reports go to
+  `build/asan/logs/`; UBSan prints to stderr even with `log_path`, so the target also greps the
+  outputs captured in `results/tmp/` (planted-error check: both paths are detected).
+- `tests/test_fuzz.c` (seeded, ~0.8 s, part of `make test`): 200k buffers for `packet_parse`
+  (100k random, 100k mutated valid packets of all 7 codes; every buffer that parses must
+  re-serialize to the same length and parse to the same packet, and parsed DATA packets go through
+  the real receive path `rx_decode_packet` + `rx_classify` - ~12.5k reach the decoders), 200k for
+  `feedback_parse` (exact byte round trip), 50k random `--schedule` strings.
+- **Findings:**
+  1. **Reed-Solomon decoder read uninitialized memory (fixed).** `rs_decode` returned -1 on an
+     uncorrectable word without writing `data`; `fec.c` then unpacked uninitialized stack bytes
+     as the decoded payload. Classification was never affected (a flagged block is always
+     DETECTED_FAIL), but the logged `tag_rx`, `crc_ok` and the dashboard's ID of failed RS frames
+     were garbage and not reproducible. Found because `tests/test_receiver.c` (decode twice, compare)
+     failed only in the sanitized build. Fix: output the received data bytes first (as
+     `bch_decode` already did); test `failure_outputs_received_data_bytes` in `tests/test_rs.c`.
+  2. No ASan/UBSan/LSan finding in any other unit test, the fuzz test, the integration test or the
+     failure-injection test (gcc 13). The fuzzer found no parser bug.
+- `make sanitize CC=clang` could not be run here: this container lacks clang's ASan runtime
+  (`libclang_rt.asan-x86_64.a`, package `libclang-rt-18-dev`). Not a project problem.

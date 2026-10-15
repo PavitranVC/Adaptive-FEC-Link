@@ -69,6 +69,9 @@ int rs_decode(const rs_code_t *c, uint8_t *cw, uint8_t *data) {
     uint8_t S[2 * RS_MAX_T], lambda[2 * RS_MAX_T + 1], omega[2 * RS_MAX_T];
     int pos[2 * RS_MAX_T], val[2 * RS_MAX_T], nerr = 0;
 
+    /* Output the RECEIVED data bytes first: on a detected failure (return -1 below) the caller
+     * gets them unchanged, like bch_decode (never uninitialized memory - found by ASan/UBSan). */
+    memcpy(data, cw + c->nroots, (size_t)c->k);
     if (!rs_syndromes(c, cw, S)) {
         /* 1. error locator */
         int L = bch_berlekamp_massey(f, S, c->nroots, lambda);

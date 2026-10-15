@@ -2,6 +2,7 @@
 # Integration test: runs the real three-process UDP pipeline (on non-default ports so it does
 # not clash with a demo running on 9000/9001) and checks the tollgate summary.
 cd "$(dirname "$0")/.." || exit 1
+BIN=${BIN:-bin}      # make sanitize sets BIN=build/asan/bin
 mkdir -p results/tmp
 PORTS="--channel-port 19100 --tollgate-port 19101 --feedback-port 19102"
 OUT=results/tmp/integration.out
@@ -121,12 +122,12 @@ finally:
 fi
 
 echo "== integration: bench smoke test"
-./bin/bench --profile toll --frames 50 --code hamming74 --out results/tmp/bench_smoke.csv >"$OUT" 2>&1
+./$BIN/bench --profile toll --frames 50 --code hamming74 --out results/tmp/bench_smoke.csv >"$OUT" 2>&1
 check "bench ok" [ $? -eq 0 ]
 check "bench csv header" grep -q '^code,model,param,frames,frame_success_rate,detected_fail_rate,silent_wrong_rate,code_rate,mean_decode_us$' results/tmp/bench_smoke.csv
 rows=$(grep -c '^hamming74,' results/tmp/bench_smoke.csv)
 check "bench csv has rows for all 3 models" eval '[ "$rows" -ge 3 ] && grep -q ",burst," results/tmp/bench_smoke.csv'
-./bin/bench --strategies --schedule toll:30,hospital:30 --trace results/tmp/trace_smoke.csv \
+./$BIN/bench --strategies --schedule toll:30,hospital:30 --trace results/tmp/trace_smoke.csv \
     --frames 50 --out results/tmp/bench_strategy_smoke.csv >"$OUT" 2>&1
 check "bench --strategies ok" [ $? -eq 0 ]
 check "strategy csv header" grep -q '^strategy,code,channel,frames,success_rate,silent_wrong_rate,retx_per_frame,mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes,goodput$' results/tmp/bench_strategy_smoke.csv

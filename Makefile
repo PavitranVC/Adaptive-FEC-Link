@@ -13,6 +13,7 @@
 #   make compare       hamming74 vs bch157 on the same seed, side by side
 #   make bench         in-process benchmark sweep -> results/bench.csv
 #   make plots         results/bench.csv -> results/*.png (needs matplotlib)
+#   make sanitize      all unit tests + integration tests built with ASan + UBSan (build/asan)
 #   make clean         remove build outputs
 
 CC      ?= cc
@@ -22,21 +23,27 @@ CFLAGS  += -std=c11 -Wall -Wextra -Wpedantic -Iinclude -MMD -MP \
            -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE
 LDLIBS  += -lm
 
+# Output directories (make sanitize re-runs this Makefile with BUILD=build/asan BINDIR=build/asan/bin)
+BUILD   ?= build
+BINDIR  ?= bin
+export BIN = $(BINDIR)
+export BUILD
+
 # Library: every src/*.c is a module of the FEC/link library.
 LIB_SRCS  := $(wildcard src/*.c)
-LIB_OBJS  := $(patsubst src/%.c,build/obj/%.o,$(LIB_SRCS))
-LIB       := build/libfeclink.a
+LIB_OBJS  := $(patsubst src/%.c,$(BUILD)/obj/%.o,$(LIB_SRCS))
+LIB       := $(BUILD)/libfeclink.a
 
 # Programs: src/apps/<name>.c -> bin/<name>, tools/bench.c -> bin/bench
 APP_SRCS  := $(wildcard src/apps/*.c)
-APPS      := $(patsubst src/apps/%.c,bin/%,$(APP_SRCS))
+APPS      := $(patsubst src/apps/%.c,$(BINDIR)/%,$(APP_SRCS))
 ifneq ($(wildcard tools/bench.c),)
-APPS      += bin/bench
+APPS      += $(BINDIR)/bench
 endif
 
 # Unit tests: tests/test_<name>.c -> build/tests/test_<name>
 TEST_SRCS := $(wildcard tests/test_*.c)
-TEST_BINS := $(patsubst tests/%.c,build/tests/%,$(TEST_SRCS))
+TEST_BINS := $(patsubst tests/%.c,$(BUILD)/tests/%,$(TEST_SRCS))
 
 # Demo / benchmark knobs (override on the command line, e.g. make demo COUNT=50)
 COUNT   ?= 20
@@ -48,19 +55,19 @@ FRAMES  ?= 5000
 SCHEDULE ?= toll:2000,hospital:2000,toll:2000
 ASCHED  ?= toll:60,hospital:80,toll:100
 
-.PHONY: all test unit-test integration-test demo demo-hospital demo-arq demo-harq demo-adaptive dashboard compare bench plots clean
+.PHONY: all test sanitize unit-test integration-test demo demo-hospital demo-arq demo-harq demo-adaptive dashboard compare bench plots clean
 
 all: $(APPS)
 
-build/obj/%.o: src/%.c
+$(BUILD)/obj/%.o: src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/obj/apps/%.o: src/apps/%.c
+$(BUILD)/obj/apps/%.o: src/apps/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-build/obj/tools/%.o: tools/%.c
+$(BUILD)/obj/tools/%.o: tools/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -69,21 +76,21 @@ $(LIB): $(LIB_OBJS)
 	rm -f $@
 	ar rcs $@ $^
 
-bin/%: build/obj/apps/%.o $(LIB)
-	@mkdir -p bin
+$(BINDIR)/%: $(BUILD)/obj/apps/%.o $(LIB)
+	@mkdir -p $(BINDIR)
 	$(CC) $(CFLAGS) $< $(LIB) $(LDLIBS) -o $@
 
-bin/bench: build/obj/tools/bench.o $(LIB)
-	@mkdir -p bin
+$(BINDIR)/bench: $(BUILD)/obj/tools/bench.o $(LIB)
+	@mkdir -p $(BINDIR)
 	$(CC) $(CFLAGS) $< $(LIB) $(LDLIBS) -o $@
 
-build/tests/%: tests/%.c tests/testlib.h $(LIB)
-	@mkdir -p build/tests
+$(BUILD)/tests/%: tests/%.c tests/testlib.h $(LIB)
+	@mkdir -p $(BUILD)/tests
 	$(CC) $(CFLAGS) $< $(LIB) $(LDLIBS) -o $@
 
 # Failure-injection helper (sends malformed UDP packets), used by tests/test_failure.sh
-build/tests/inject: tests/inject.c $(LIB)
-	@mkdir -p build/tests
+$(BUILD)/tests/inject: tests/inject.c $(LIB)
+	@mkdir -p $(BUILD)/tests
 	$(CC) $(CFLAGS) $< $(LIB) $(LDLIBS) -o $@
 
 test: unit-test integration-test
@@ -92,7 +99,7 @@ unit-test: $(TEST_BINS)
 	@set -e; for t in $(TEST_BINS); do echo "== $$t"; ./$$t; done
 	@echo "All unit tests passed."
 
-integration-test: all build/tests/inject
+integration-test: all $(BUILD)/tests/inject
 	@if [ -f tests/test_integration.sh ]; then sh tests/test_integration.sh; fi
 	sh tests/test_failure.sh
 	@if command -v $(PYTHON) >/dev/null 2>&1; then $(PYTHON) tests/test_dashboard.py; fi
@@ -136,7 +143,25 @@ plots:
 	@if [ -f results/adaptive_trace.csv ]; then $(PYTHON) tools/plot.py results/adaptive_trace.csv; fi
 	@if [ -f results/bench_rtt_5.csv ]; then $(PYTHON) tools/plot.py results/bench_rtt_5.csv results/bench_rtt_20.csv results/bench_rtt_50.csv; fi
 
+# AddressSanitizer + UndefinedBehaviorSanitizer: separate build tree, every finding is fatal and
+# also written to build/asan/logs/ (background processes of the integration tests included).
+# CFLAGS goes through the environment so the Makefile's "CFLAGS += -std=c11 ..." still applies.
+SAN_FLAGS = -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all
+# UBSan prints to stderr even with log_path, so the outputs the integration tests capture in
+# results/tmp/ are searched as well (a finding in a background process must not go unnoticed).
+SAN_PATTERN = runtime error:\|ERROR: AddressSanitizer\|ERROR: LeakSanitizer\|SUMMARY: UndefinedBehavior
+sanitize:
+	@rm -rf build/asan/logs && mkdir -p build/asan/logs results/tmp && touch build/asan/logs/.start
+	ASAN_OPTIONS=log_path=$(CURDIR)/build/asan/logs/asan:detect_leaks=1 \
+	UBSAN_OPTIONS=log_path=$(CURDIR)/build/asan/logs/ubsan:print_stacktrace=1 \
+	CFLAGS="$(SAN_FLAGS)" $(MAKE) BUILD=build/asan BINDIR=build/asan/bin test
+	@if ls build/asan/logs/[au]* >/dev/null 2>&1; then \
+	    echo "SANITIZER FINDINGS:"; cat build/asan/logs/[au]*; exit 1; fi
+	@if find results/tmp -type f -newer build/asan/logs/.start | xargs grep -l "$(SAN_PATTERN)" 2>/dev/null; then \
+	    echo "SANITIZER FINDINGS in the files above"; exit 1; fi
+	@echo "make sanitize: all tests passed under ASan + UBSan, no findings."
+
 clean:
 	rm -rf build bin/vehicle bin/channel bin/tollgate bin/bench results/tmp
 
--include $(LIB_OBJS:.o=.d) $(wildcard build/obj/apps/*.d) $(wildcard build/obj/tools/*.d)
+-include $(LIB_OBJS:.o=.d) $(wildcard $(BUILD)/obj/apps/*.d) $(wildcard $(BUILD)/obj/tools/*.d)

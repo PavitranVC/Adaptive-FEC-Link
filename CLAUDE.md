@@ -83,6 +83,7 @@ make            # build all binaries into bin/
 make test       # unit tests + integration test (must pass before every commit)
 make clean
 make CC=clang test   # check the other compiler too
+make sanitize        # all tests under AddressSanitizer + UBSan (build/asan), must report no findings
 ```
 
 ## Coding rules

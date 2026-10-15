@@ -3,11 +3,13 @@
 # input and never crash; a broken setup must fail loudly with a non-zero exit code.
 # Uses ports 19200-19202 so it never clashes with a demo or tests/test_integration.sh.
 cd "$(dirname "$0")/.." || exit 1
+BIN=${BIN:-bin}      # make sanitize sets BIN=build/asan/bin
+BUILD=${BUILD:-build}
 mkdir -p results/tmp
 T=results/tmp/failure
 CP=19200; TP=19201; FP=19202
 PORTS="--channel-port $CP --tollgate-port $TP --feedback-port $FP"
-INJ=./build/tests/inject
+INJ=./$BUILD/tests/inject
 fail=0
 
 check() { # check <description> <command...>
@@ -30,7 +32,7 @@ brief() {
 
 echo "== failure: malformed packets straight into the tollgate, END lost"
 rm -f $T.sum
-./bin/tollgate $PORTS --no-color --idle-timeout-ms 1500 --summary-file $T.sum >$T.tg 2>&1 &
+./$BIN/tollgate $PORTS --no-color --idle-timeout-ms 1500 --summary-file $T.sum >$T.tg 2>&1 &
 TG=$!
 sleep 0.3
 $INJ --port $TP malformed >$T.inj
@@ -51,10 +53,10 @@ check "duplicate seq + late copy ignored" [ "$(val $T.sum duplicates)" -eq 2 ]
 
 echo "== failure: malformed packets into the channel, then END"
 rm -f $T.sum
-./bin/tollgate $PORTS --no-color --idle-timeout-ms 3000 --summary-file $T.sum >$T.tg 2>&1 &
+./$BIN/tollgate $PORTS --no-color --idle-timeout-ms 3000 --summary-file $T.sum >$T.tg 2>&1 &
 TG=$!
 sleep 0.3
-./bin/channel $PORTS --no-color --idle-timeout-ms 3000 >$T.ch 2>&1 &
+./$BIN/channel $PORTS --no-color --idle-timeout-ms 3000 >$T.ch 2>&1 &
 CH=$!
 sleep 0.3
 $INJ --port $CP malformed >$T.inj
@@ -68,22 +70,22 @@ check "tollgate got only valid frames" eval '[ "$(val $T.sum malformed)" -eq 0 ]
 check "END forwarded: sent 2, lost 0" eval '[ "$(val $T.sum sent)" -eq 2 ] && [ "$(val $T.sum lost)" -eq 0 ]'
 
 echo "== failure: UDP port already in use"
-./bin/tollgate $PORTS --no-color --idle-timeout-ms 0 >$T.tg1 2>&1 &
+./$BIN/tollgate $PORTS --no-color --idle-timeout-ms 0 >$T.tg1 2>&1 &
 TG=$!
-./bin/channel $PORTS --no-color --idle-timeout-ms 0 >$T.ch1 2>&1 &
+./$BIN/channel $PORTS --no-color --idle-timeout-ms 0 >$T.ch1 2>&1 &
 CH=$!
 sleep 0.3
-brief $T.tg2 ./bin/tollgate $PORTS --no-color
+brief $T.tg2 ./$BIN/tollgate $PORTS --no-color
 check "second tollgate exits non-zero at once" eval '[ "$rc" -ne 0 ] && [ "$rc" -ne 124 ]'
 check "second tollgate says why" grep -q "cannot bind UDP 127.0.0.1:$TP" $T.tg2
-brief $T.ch2 ./bin/channel $PORTS --no-color
+brief $T.ch2 ./$BIN/channel $PORTS --no-color
 check "second channel exits non-zero at once" eval '[ "$rc" -ne 0 ] && [ "$rc" -ne 124 ]'
 check "second channel says why" grep -q "cannot bind UDP 127.0.0.1:$CP" $T.ch2
 kill $TG $CH 2>/dev/null; wait $TG $CH 2>/dev/null
-./bin/vehicle $PORTS --no-color --strategy harq --count 1 >$T.v1 2>&1 &
+./$BIN/vehicle $PORTS --no-color --strategy harq --count 1 >$T.v1 2>&1 &
 V1=$!
 sleep 0.3
-brief $T.v2 ./bin/vehicle $PORTS --no-color --strategy harq --count 1
+brief $T.v2 ./$BIN/vehicle $PORTS --no-color --strategy harq --count 1
 check "second vehicle (feedback port taken) exits non-zero at once" eval '[ "$rc" -ne 0 ] && [ "$rc" -ne 124 ]'
 check "second vehicle says why" grep -q "cannot bind UDP 127.0.0.1:$FP" $T.v2
 kill $V1 2>/dev/null; wait $V1 2>/dev/null

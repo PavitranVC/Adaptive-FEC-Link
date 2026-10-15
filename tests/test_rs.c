@@ -100,6 +100,30 @@ TEST(too_many_errors_fail_or_give_a_codeword) {
     CHECK(detected > 2500);   /* shortened codes detect almost every overload */
 }
 
+/* Found by `make sanitize` (overnight task 2): on a detected failure rs_decode used to return
+ * without writing `data`, so the caller decoded uninitialized stack bytes (non-deterministic ID
+ * and CRC). Like bch_decode it must output the RECEIVED data bytes, untouched. */
+TEST(failure_outputs_received_data_bytes) {
+    const rs_code_t *c = rs_get(16, 4);
+    rng_t r;
+    rng_seed(&r, 11);
+    int failures = 0, bad = 0;
+    for (int trial = 0; trial < 2000; trial++) {
+        uint8_t d[16], cw[24], rx[24], before[24], out[16];
+        random_bytes(&r, d, 16);
+        rs_encode(c, d, cw);
+        memcpy(rx, cw, 24);
+        for (int e = 0; e < 8; e++) rx[rng_below(&r, 24)] ^= (uint8_t)(1 + rng_below(&r, 255));
+        memcpy(before, rx, 24);
+        memset(out, 0xA5, sizeof out);
+        if (rs_decode(c, rx, out) >= 0) continue;
+        failures++;
+        bad += memcmp(out, before + c->nroots, 16) != 0 || memcmp(rx, before, 24) != 0;
+    }
+    CHECK(failures > 1000);
+    CHECK_EQ_INT(bad, 0);
+}
+
 /* Burst correction: a burst of L bits touches at most ceil((L + 7) / 8) bytes, so t = 4
  * corrects EVERY bit burst of length <= 8 * (t - 1) + 1 = 25, at every position. */
 TEST(t4_corrects_every_bit_burst_up_to_25) {
@@ -123,6 +147,7 @@ int main(void) {
     RUN(corrects_up_to_t_symbol_errors_randomized);
     RUN(t4_all_double_symbol_positions);
     RUN(too_many_errors_fail_or_give_a_codeword);
+    RUN(failure_outputs_received_data_bytes);
     RUN(t4_corrects_every_bit_burst_up_to_25);
     return TEST_REPORT();
 }
