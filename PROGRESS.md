@@ -3,6 +3,8 @@
 Week 1 on `claude/bold-gauss-xza289` (merged into `main`). Week 2 on `week2`, merged into `main`
 (tag `v0.2-week2` exists only locally: the session proxy refused tag pushes with HTTP 403).
 Final polish on `final-polish`, fast-forwarded into `main`.
+Overnight run A (failure injection, sanitizers + fuzzing, multi-seed statistics, all-RS ladder
+experiment) on `overnight-a`, fast-forwarded into `main` once `make test` passed.
 
 ## Status
 
@@ -29,11 +31,17 @@ Final polish on `final-polish`, fast-forwarded into `main`.
 
 ## Test status
 
-`make test` = 20 unit-test binaries + `tests/test_integration.sh` (real three-process UDP runs on
-ports 19100-19102: reproducibility, hospital profile, BCH, RS, interleaver, compare, ARQ, HARQ
-with 30% injected feedback loss, adaptive on a toll->hospital->toll schedule, JSON-lines log +
-dashboard HTTP server, bench + plot smoke tests) + `tests/test_dashboard.py`.
-**All green with gcc 13 and clang** on Ubuntu 24.04.
+`make test` = 23 unit-test binaries (new: `test_packet` malformed/truncated/header-corruption,
+`test_fuzz` 450k fuzzed parser inputs, `test_stats` confidence intervals) + `tests/test_integration.sh`
+(real three-process UDP runs on ports 19100-19102: reproducibility, hospital profile, BCH, RS,
+interleaver, compare, ARQ, HARQ with 30% injected feedback loss, adaptive on a toll->hospital->toll
+schedule, adaptive with `--ladder rs`, JSON-lines log + dashboard HTTP server, bench / `--seeds` /
+plot smoke tests) + `tests/test_failure.sh` (failure injection, ports 19200-19202) +
+`tests/test_dashboard.py` (was never committed before - `.gitignore` hid it, so `make test` failed
+on a fresh clone; restored).
+**All green with gcc 13 and clang** on Ubuntu 24.04. **`make sanitize` (gcc, ASan + UBSan, every
+unit and integration test): no findings** after one fix (RS decoder, see DECISIONS.md task 2).
+`make sanitize CC=clang` needs clang's ASan runtime (`libclang-rt-18-dev`), not installed here.
 Not run on macOS/WSL in this session (no machine available) - the code only uses C11 + POSIX
 (sockets, poll, clock_gettime, nanosleep, sigaction) and POSIX `sh`/`awk`, but please try
 `make test` on a Mac once.
@@ -71,6 +79,7 @@ vs 100.000% (within 0.5 pp). Not shown: it does not beat fixed HARQ + RS t=4 on 
 ## Known issues / limitations
 
 - Nothing known broken.
+- `make bench` now takes ~1:40 (two 20-seed runs added).
 - `results/*.png` latency plots change slightly on every `make bench` (timing noise); commit
   them only when you want to update the "final" plots.
 - The tollgate ignores duplicate frames by `seq mod 65536`, fine for runs < 65536 frames.
@@ -94,13 +103,15 @@ vs 100.000% (within 0.5 pp). Not shown: it does not beat fixed HARQ + RS t=4 on 
 
 ## Exact next step
 
-1. Failure-injection testing (PLAN.md): add `--corrupt-header P` to `bin/channel`, malformed and
-   truncated packets, lost END, port already in use; each with a test that the receiver logs and
-   drops instead of crashing.
-2. Final report: build it around `results/goodput_vs_success.png`, `results/strategy_comparison.png`,
-   `results/adaptive_level.png`, `results/rtt_sensitivity.png` and the honest finding above.
-3. Optional experiment (decide as a team, report it as a NEW experiment, not a fix): an all-RS
-   ladder (t = 1..8) where lower rungs really have higher code rates.
+1. **Gate A**: review the "Open problems" above (header misrouting) and the 3 bugs fixed tonight
+   (DECISIONS.md, overnight task 1 table + task 2); re-run `make test` and `make sanitize`.
+2. Final report (Run B): build it around `results/goodput_vs_success_ci.png` (20-seed CIs),
+   `results/strategy_comparison.png`, `results/adaptive_level.png`, `results/rtt_sensitivity.png`,
+   `results/ladder_rs_experiment.png` (NEW experiment, label it so) and the honest findings above.
+   Use the 20-seed numbers (README table), not the single-seed ones.
+3. Team decision: keep `--ladder mixed` as default for the demo (everything is documented with it),
+   or switch the demo to `rs`. Either way the RS ladder is reported as a new experiment.
+4. Optional: protect the header with a CRC-16 (fixes the misrouting found by `--corrupt-header`).
 
 ## 🔀 Decisions to review (details in DECISIONS.md)
 
@@ -131,3 +142,9 @@ vs 100.000% (within 0.5 pp). Not shown: it does not beat fixed HARQ + RS t=4 on 
     sensitivity run: rankings unchanged).
 20. Goodput counts the 128-bit payload (ID + CRC) as useful, all coded bits as cost.
 19. Dashboard uses the Python standard library only (no Flask).
+
+### New in overnight run A
+
+21. Header corruption = 1-4 random header bit flips per hit packet, END exempt (failure injection).
+22. 95% CI over seeds from Student's t (not bootstrap); strategies compared by paired differences.
+23. `--ladder rs` (all-RS ladder) is a separate, pre-registered experiment; default stays `mixed`.
