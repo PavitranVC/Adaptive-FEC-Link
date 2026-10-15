@@ -8,7 +8,7 @@
  * ------------------------------------------------------------------------------------------ */
 typedef struct { code_id_t code; int rs_t; int interleave; const char *label; } rung_t;
 
-static const rung_t LADDER[] = {
+static const rung_t LADDER_MIXED_RUNGS[] = {   /* the original ladder (default) */
     {CODE_NONE, 4, 1, "L0 uncoded"},
     {CODE_HAMMING74, 4, 1, "L1 Hamming(7,4)"},
     {CODE_BCH157, 4, 1, "L2 BCH(15,7)"},
@@ -16,7 +16,36 @@ static const rung_t LADDER[] = {
     {CODE_RS, 4, 1, "L4 RS(24,16) t=4"},
     {CODE_RS, 8, 1, "L5 RS(32,16) t=8"},
 };
-#define NLEVELS ((int)(sizeof LADDER / sizeof LADDER[0]))
+static const rung_t LADDER_RS_RUNGS[] = {      /* --ladder rs: code rate strictly decreasing */
+    {CODE_RS, 1, 1, "L0 RS(18,16) t=1"},
+    {CODE_RS, 2, 1, "L1 RS(20,16) t=2"},
+    {CODE_RS, 4, 1, "L2 RS(24,16) t=4"},
+    {CODE_RS, 6, 1, "L3 RS(28,16) t=6"},
+    {CODE_RS, 8, 1, "L4 RS(32,16) t=8"},
+};
+#define COUNT_OF(a) ((int)(sizeof(a) / sizeof((a)[0])))
+
+static ladder_id_t g_ladder = LADDER_MIXED;
+static const rung_t *LADDER = LADDER_MIXED_RUNGS;
+static int NLEVELS = COUNT_OF(LADDER_MIXED_RUNGS);
+
+static const char *const LADDER_NAMES[] = {"mixed", "rs"};
+
+void ladder_select(ladder_id_t id) {
+    g_ladder = id == LADDER_RS ? LADDER_RS : LADDER_MIXED;
+    LADDER = g_ladder == LADDER_RS ? LADDER_RS_RUNGS : LADDER_MIXED_RUNGS;
+    NLEVELS = g_ladder == LADDER_RS ? COUNT_OF(LADDER_RS_RUNGS) : COUNT_OF(LADDER_MIXED_RUNGS);
+}
+
+ladder_id_t ladder_selected(void) { return g_ladder; }
+
+const char *ladder_name(ladder_id_t id) { return LADDER_NAMES[id == LADDER_RS ? 1 : 0]; }
+
+int ladder_from_name(const char *name, ladder_id_t *out) {
+    for (int i = 0; i < 2; i++)
+        if (!strcmp(name, LADDER_NAMES[i])) { *out = (ladder_id_t)i; return 0; }
+    return -1;
+}
 
 int ladder_levels(void) { return NLEVELS; }
 
@@ -84,7 +113,7 @@ void adapt_defaults(adapt_params_t *p) {
     p->down_threshold = 0.05;
     p->start_level = 1;
     p->min_level = 0;
-    p->max_level = NLEVELS - 1;
+    p->max_level = 1000;          /* "the top" - adapt_init clamps it to the selected ladder */
     p->max_hold = 16;
 }
 
@@ -92,6 +121,7 @@ void adapt_init(adapt_t *a, const adapt_params_t *p) {
     memset(a, 0, sizeof *a);
     a->p = *p;
     if (a->p.max_level >= NLEVELS) a->p.max_level = NLEVELS - 1;
+    if (a->p.start_level >= NLEVELS) a->p.start_level = NLEVELS - 1;
     if (a->p.min_level < 0) a->p.min_level = 0;
     a->level = a->p.start_level < a->p.min_level ? a->p.min_level
              : a->p.start_level > a->p.max_level ? a->p.max_level : a->p.start_level;

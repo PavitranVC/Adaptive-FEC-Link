@@ -30,6 +30,10 @@
  *   results/bench_strategy_seeds.csv). Also writes <out>_raw.csv (one row per seed) and
  *   <out>_diff.csv: PAIRED differences adaptive - HARQ+RS t=8 and adaptive - HARQ+RS t=4 on the
  *   same seeds (mean, 95% CI, significant = CI excludes 0). Without --seeds nothing changes.
+ *
+ * --ladder rs (overnight task 4, a NEW experiment): the adaptive row uses the all-RS ladder
+ *   (code "ladder_rs"); in --seeds mode the original mixed-ladder adaptive row is added on the
+ *   same seeds and <out>_diff.csv also holds adaptive_rs - adaptive_mixed. Default: mixed.
  */
 #include <stdio.h>
 #include <string.h>
@@ -100,19 +104,20 @@ static int build_variants(const cli_opts_t *o, int only_code, variant_t *vs) {
 
 /* ---------------------------------------------------------------- strategy comparison ---- */
 
-typedef struct { const char *label; strategy_t strategy; code_id_t code; int rs_t; } strat_row_t;
+/* ladder (adaptive only): 0 = the ladder chosen with --ladder, LADDER_x + 1 = that ladder */
+typedef struct { const char *label; strategy_t strategy; code_id_t code; int rs_t; int ladder; } strat_row_t;
 
 /* Fixed baselines include the two strongest codes of the adaptive ladder (RS t=4, RS t=8) with
  * HARQ, so the adaptive controller is compared against "always use the strongest code". */
 static const strat_row_t STRAT_ROWS[] = {
-    {"fec", STRAT_FEC, CODE_HAMMING74, 4}, {"fec", STRAT_FEC, CODE_BCH157, 4},
-    {"fec", STRAT_FEC, CODE_BCH3116, 4},   {"fec", STRAT_FEC, CODE_RS, 4},
-    {"fec", STRAT_FEC, CODE_RS, 8},
-    {"arq", STRAT_ARQ, CODE_NONE, 4},
-    {"harq", STRAT_HARQ, CODE_HAMMING74, 4}, {"harq", STRAT_HARQ, CODE_BCH157, 4},
-    {"harq", STRAT_HARQ, CODE_BCH3116, 4},   {"harq", STRAT_HARQ, CODE_RS, 4},
-    {"harq", STRAT_HARQ, CODE_RS, 8},
-    {"adaptive", STRAT_ADAPTIVE, CODE_NONE, 4},
+    {"fec", STRAT_FEC, CODE_HAMMING74, 4, 0}, {"fec", STRAT_FEC, CODE_BCH157, 4, 0},
+    {"fec", STRAT_FEC, CODE_BCH3116, 4, 0},   {"fec", STRAT_FEC, CODE_RS, 4, 0},
+    {"fec", STRAT_FEC, CODE_RS, 8, 0},
+    {"arq", STRAT_ARQ, CODE_NONE, 4, 0},
+    {"harq", STRAT_HARQ, CODE_HAMMING74, 4, 0}, {"harq", STRAT_HARQ, CODE_BCH157, 4, 0},
+    {"harq", STRAT_HARQ, CODE_BCH3116, 4, 0},   {"harq", STRAT_HARQ, CODE_RS, 4, 0},
+    {"harq", STRAT_HARQ, CODE_RS, 8, 0},
+    {"adaptive", STRAT_ADAPTIVE, CODE_NONE, 4, 0},
 };
 
 static void base_params(const cli_opts_t *o, linksim_params_t *lp) {
@@ -133,8 +138,15 @@ static void profile_channel(const profile_t *prof, linksim_params_t *lp) {
     lp->seg[0].label = prof->label;
 }
 
+static ladder_id_t g_ladder = LADDER_MIXED;   /* --ladder */
+
+static ladder_id_t row_ladder(const strat_row_t *row) {
+    return row->ladder ? (ladder_id_t)(row->ladder - 1) : g_ladder;
+}
+
 static void row_code_name(const strat_row_t *row, char *code, size_t cap) {
-    if (row->strategy == STRAT_ADAPTIVE) snprintf(code, cap, "ladder");
+    if (row->strategy == STRAT_ADAPTIVE)       /* "ladder" = mixed (as before), "ladder_rs" */
+        snprintf(code, cap, row_ladder(row) == LADDER_RS ? "ladder_rs" : "ladder");
     else if (row->code == CODE_RS) snprintf(code, cap, "rs_t%d", row->rs_t);
     else snprintf(code, cap, "%s", fec_code_name(row->code));
 }
@@ -143,7 +155,9 @@ static void run_row(linksim_params_t *lp, const strat_row_t *row, linksim_result
     lp->strategy = row->strategy;
     lp->fixed = fec_config(row->code);
     lp->fixed.rs_t = row->rs_t;
+    ladder_select(row_ladder(row));
     linksim_run(lp, r, trace);
+    ladder_select(g_ladder);
 }
 
 static void strategy_row(FILE *csv, const char *channel, linksim_params_t *lp,
@@ -202,6 +216,10 @@ static int run_strategies(const cli_opts_t *o) {
 /* ------------------------------------------------------------ multi-seed comparison ---- */
 
 #define N_ROWS ((int)(sizeof STRAT_ROWS / sizeof STRAT_ROWS[0]))
+#define MAX_ROWS (N_ROWS + 1)
+/* With --ladder rs the original (mixed) adaptive row is run too, on the same seeds, so that
+ * "all-RS ladder minus mixed ladder" is a paired comparison (overnight task 4). */
+static const strat_row_t MIXED_ADAPTIVE_ROW = {"adaptive", STRAT_ADAPTIVE, CODE_NONE, 4, LADDER_MIXED + 1};
 #define MAX_CH 3
 enum { M_SUCCESS, M_GOODPUT, M_RETX, M_P99, N_METRICS };
 static const char *const METRIC[N_METRICS] = {"success_rate", "goodput", "retx_per_frame",
@@ -216,10 +234,12 @@ static double metric_of(const linksim_result_t *r, int m) {
     }
 }
 
-static int find_row(strategy_t s, code_id_t code, int rs_t) {
-    for (int i = 0; i < N_ROWS; i++)
-        if (STRAT_ROWS[i].strategy == s && STRAT_ROWS[i].code == code &&
-            (code != CODE_RS || STRAT_ROWS[i].rs_t == rs_t))
+static int find_row(const strat_row_t *rows, int nrows, strategy_t s, code_id_t code, int rs_t,
+                    ladder_id_t ladder) {
+    for (int i = 0; i < nrows; i++)
+        if (rows[i].strategy == s && rows[i].code == code &&
+            (code != CODE_RS || rows[i].rs_t == rs_t) &&
+            (s != STRAT_ADAPTIVE || row_ladder(&rows[i]) == ladder))
             return i;
     return -1;
 }
@@ -278,22 +298,26 @@ static int run_strategies_seeds(const cli_opts_t *o) {
         schedule_to_linksim(&sched, o->model_set, o->model, o->p, &lp[nch]);
         chname[nch++] = "schedule";
     }
-    static linksim_result_t res[MAX_CH][N_ROWS][1000];
+    static linksim_result_t res[MAX_CH][MAX_ROWS][1000];
+    strat_row_t rows[MAX_ROWS];
+    int nrows = N_ROWS;
+    memcpy(rows, STRAT_ROWS, sizeof STRAT_ROWS);
+    if (g_ladder != LADDER_MIXED) rows[nrows++] = MIXED_ADAPTIVE_ROW;
     printf("bench --strategies --seeds %d: seeds %llu..%llu, %ld frames per row and seed -> %s\n",
            n, (unsigned long long)o->seed, (unsigned long long)(o->seed + (uint64_t)n - 1), o->frames, path);
     FILE *raw = open_csv(raw_path, "strategy,code,channel,seed,frames,success_rate,silent_wrong_rate,"
                          "retx_per_frame,mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes,goodput");
     if (!raw) return 1;
     for (int c = 0; c < nch; c++)
-        for (int i = 0; i < N_ROWS; i++)
+        for (int i = 0; i < nrows; i++)
             for (int k = 0; k < n; k++) {
                 linksim_result_t *r = &res[c][i][k];
                 char code[24];
                 lp[c].seed = o->seed + (uint64_t)k;
-                run_row(&lp[c], &STRAT_ROWS[i], r, NULL);
-                row_code_name(&STRAT_ROWS[i], code, sizeof code);
+                run_row(&lp[c], &rows[i], r, NULL);
+                row_code_name(&rows[i], code, sizeof code);
                 fprintf(raw, "%s,%s,%s,%llu,%ld,%.6f,%.6f,%.4f,%.3f,%.3f,%.4f,%ld,%.4f\n",
-                        STRAT_ROWS[i].label, code, chname[c], (unsigned long long)lp[c].seed,
+                        rows[i].label, code, chname[c], (unsigned long long)lp[c].seed,
                         r->frames, r->success_rate, r->silent_wrong_rate, r->retx_per_frame,
                         r->mean_latency_ms, r->p99_latency_ms, r->mean_code_rate,
                         r->level_changes, r->goodput);
@@ -304,7 +328,7 @@ static int run_strategies_seeds(const cli_opts_t *o) {
                          "goodput_mean,goodput_ci95,retx_mean,retx_ci95,p99_mean,p99_ci95");
     if (!csv) return 1;
     for (int c = 0; c < nch; c++)
-        for (int i = 0; i < N_ROWS; i++) {
+        for (int i = 0; i < nrows; i++) {
             stats_ci_t st[N_METRICS];
             double x[1000];
             char code[24];
@@ -312,23 +336,27 @@ static int run_strategies_seeds(const cli_opts_t *o) {
                 for (int k = 0; k < n; k++) x[k] = metric_of(&res[c][i][k], m);
                 st[m] = stats_mean_ci(x, n);
             }
-            row_code_name(&STRAT_ROWS[i], code, sizeof code);
+            row_code_name(&rows[i], code, sizeof code);
             fprintf(csv, "%s,%s,%s,%d,%ld,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.4f,%.4f\n",
-                    STRAT_ROWS[i].label, code, chname[c], n, o->frames, st[0].mean, st[0].half,
+                    rows[i].label, code, chname[c], n, o->frames, st[0].mean, st[0].half,
                     st[1].mean, st[1].half, st[2].mean, st[2].half, st[3].mean, st[3].half);
             printf("  %-9s %-10s %-17s success=%.4f+-%.4f goodput=%.4f+-%.4f retx=%.3f+-%.3f p99=%.2f+-%.2f ms\n",
-                   STRAT_ROWS[i].label, code, chname[c], st[0].mean, st[0].half, st[1].mean,
+                   rows[i].label, code, chname[c], st[0].mean, st[0].half, st[1].mean,
                    st[1].half, st[2].mean, st[2].half, st[3].mean, st[3].half);
         }
     fclose(csv);
 
     FILE *diff = open_csv(diff_path, "channel,a,b,metric,seeds,mean_diff,ci95,lo,hi,significant");
     if (!diff) return 1;
-    int ad = find_row(STRAT_ADAPTIVE, CODE_NONE, 4), h8 = find_row(STRAT_HARQ, CODE_RS, 8),
-        h4 = find_row(STRAT_HARQ, CODE_RS, 4);
+    int ad = find_row(rows, nrows, STRAT_ADAPTIVE, CODE_NONE, 4, g_ladder),
+        h8 = find_row(rows, nrows, STRAT_HARQ, CODE_RS, 8, g_ladder),
+        h4 = find_row(rows, nrows, STRAT_HARQ, CODE_RS, 4, g_ladder),
+        mx = find_row(rows, nrows, STRAT_ADAPTIVE, CODE_NONE, 4, LADDER_MIXED);
+    const char *aname = g_ladder == LADDER_RS ? "adaptive_rs" : "adaptive";
     for (int c = 0; c < nch; c++) {
-        write_diffs(diff, chname[c], res[c][ad], res[c][h8], "adaptive", "harq_rs_t8", n);
-        write_diffs(diff, chname[c], res[c][ad], res[c][h4], "adaptive", "harq_rs_t4", n);
+        write_diffs(diff, chname[c], res[c][ad], res[c][h8], aname, "harq_rs_t8", n);
+        write_diffs(diff, chname[c], res[c][ad], res[c][h4], aname, "harq_rs_t4", n);
+        if (mx != ad) write_diffs(diff, chname[c], res[c][ad], res[c][mx], aname, "adaptive_mixed", n);
     }
     fclose(diff);
     printf("bench: wrote %s, %s, %s (95%% CI: Student t, %d degrees of freedom, t = %.3f)\n",
@@ -341,6 +369,8 @@ int main(int argc, char **argv) {
     cli_defaults(&o);
     int rc = cli_parse(&o, argc, argv);
     if (rc) return rc > 0 ? 0 : 2;
+    g_ladder = o.ladder;
+    ladder_select(g_ladder);
     if (o.strategies) return o.seeds > 0 ? run_strategies_seeds(&o) : run_strategies(&o);
     int only_code = has_flag(argc, argv, "--code"), only_model = o.model_set;
     const char *path = o.out_path ? o.out_path : "results/bench.csv";

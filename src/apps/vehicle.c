@@ -185,6 +185,7 @@ int main(int argc, char **argv) {
     cli_defaults(&o);
     int rc = cli_parse(&o, argc, argv);
     if (rc) return rc > 0 ? 0 : 2;
+    ladder_select(o.ladder);          /* before any controller / level lookup */
     setvbuf(stdout, NULL, _IOLBF, 0);
     term_init(o.color);
     install_stop_handler();
@@ -208,7 +209,8 @@ int main(int argc, char **argv) {
     if (sender_needs_feedback(&snd))
         term_say(TAG, T_BLUE, "strategy %s: feedback on port %d, RTT %d ms, timeout %d ms, max %d retries%s",
                  strategy_name(o.strategy), o.feedback_port, o.rtt_ms, o.timeout_ms, o.max_retries,
-                 o.strategy == STRAT_ADAPTIVE ? ", adaptive code ladder" : "");
+                 o.strategy == STRAT_ADAPTIVE ? (o.ladder == LADDER_RS ? ", adaptive all-RS ladder (experiment)"
+                                                                       : ", adaptive code ladder") : "");
     if (o.strategy == STRAT_ADAPTIVE)
         term_say(TAG, T_BLUE, "adaptive: start %s, window %d, up > %.0f%% failures, down < %.0f%% predicted",
                  ladder_label(snd.ctl.level), ap.window, 100 * ap.up_threshold, 100 * ap.down_threshold);

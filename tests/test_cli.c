@@ -116,6 +116,19 @@ TEST(seeds_flag) {
     CHECK(parse(&o, 3, bad) != 0);
 }
 
+TEST(ladder_flag) {
+    cli_opts_t o;
+    cli_defaults(&o);
+    CHECK(o.ladder == LADDER_MIXED);
+    const char *argv[] = {"x", "--ladder", "rs"};
+    CHECK_EQ_INT(parse(&o, 3, argv), 0);
+    CHECK(o.ladder == LADDER_RS);
+    CHECK(ladder_selected() == LADDER_MIXED);       /* parsing alone selects nothing */
+    fprintf(stderr, "    (1 error message expected below)\n");
+    const char *bad[] = {"x", "--ladder", "turbo"};
+    CHECK(parse(&o, 3, bad) != 0);
+}
+
 TEST(ports) {
     const char *argv[] = {"x", "--channel-port", "19000", "--tollgate-port", "19001"};
     cli_opts_t o;
@@ -132,6 +145,7 @@ int main(void) {
     RUN(week2_flags);
     RUN(failure_injection_flags);
     RUN(seeds_flag);
+    RUN(ladder_flag);
     RUN(ports);
     return TEST_REPORT();
 }

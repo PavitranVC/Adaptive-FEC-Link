@@ -27,6 +27,44 @@ TEST(ladder_is_valid_and_ordered) {
     }
 }
 
+/* Overnight task 4: the alternative all-RS ladder (--ladder rs), a NEW experiment. */
+TEST(rs_ladder_is_valid_and_ordered_by_code_rate) {
+    ladder_id_t id;
+    CHECK(ladder_from_name("mixed", &id) == 0 && id == LADDER_MIXED);
+    CHECK(ladder_from_name("rs", &id) == 0 && id == LADDER_RS);
+    CHECK(ladder_from_name("ldpc", &id) != 0);
+    CHECK(ladder_selected() == LADDER_MIXED);                 /* default = today's ladder */
+    ladder_select(LADDER_RS);
+    CHECK(!strcmp(ladder_name(ladder_selected()), "rs"));
+    CHECK_EQ_INT(ladder_levels(), 5);
+    const int T[] = {1, 2, 4, 6, 8};
+    const double RATE[] = {0.889, 0.800, 0.667, 0.571, 0.500};
+    for (int l = 0; l < 5; l++) {
+        fec_config_t c = ladder_config(l);
+        CHECK(c.code == CODE_RS && c.rs_t == T[l] && c.interleave == 1);
+        CHECK(fec_config_valid(&c));
+        CHECK_NEAR(fec_code_rate(&c, 128), RATE[l], 0.001);
+        CHECK_EQ_INT(ladder_level_of(&c), l);
+        CHECK(strlen(ladder_label(l)) > 0);
+        if (l > 0) {                                          /* stronger AND more expensive */
+            fec_config_t lo = ladder_config(l - 1);
+            CHECK(adapt_predict_fail(&c, 0.01) < adapt_predict_fail(&lo, 0.01));
+        }
+    }
+    fec_config_t h = fec_config(CODE_HAMMING74);
+    CHECK_EQ_INT(ladder_level_of(&h), -1);                    /* not on this ladder */
+    adapt_params_t p;
+    adapt_defaults(&p);
+    adapt_t a;
+    adapt_init(&a, &p);
+    CHECK_EQ_INT(a.level, 1);                                 /* same start index: RS t=2 */
+    CHECK_EQ_INT(a.p.max_level, 4);
+    ladder_select(LADDER_MIXED);                              /* back to the default */
+    CHECK_EQ_INT(ladder_levels(), 6);
+    adapt_init(&a, &p);                                       /* defaults do not depend on the */
+    CHECK_EQ_INT(a.p.max_level, 5);                           /* ladder selected at that time  */
+}
+
 TEST(predicted_failure_matches_binomial_maths) {
     fec_config_t h = fec_config(CODE_HAMMING74), n = fec_config(CODE_NONE);
     /* Hamming(7,4): P(block ok) = (1-p)^7 + 7p(1-p)^6; frame = 32 blocks */
@@ -149,6 +187,7 @@ TEST(successful_probe_resets_the_hold) {
 
 int main(void) {
     RUN(ladder_is_valid_and_ordered);
+    RUN(rs_ladder_is_valid_and_ordered_by_code_rate);
     RUN(predicted_failure_matches_binomial_maths);
     RUN(window_slides_and_resets_on_level_change);
     RUN(steps_up_on_failures_only_with_a_full_window);

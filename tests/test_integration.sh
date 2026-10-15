@@ -97,6 +97,16 @@ check "controller stepped up" grep -q 'LEVEL UP' "$OUT"
 check "controller stepped back down" grep -q 'LEVEL DOWN' "$OUT"
 check "adaptive mostly correct (>= 190)" [ "$(val correct)" -ge 190 ]
 
+echo "== integration: adaptive with the all-RS ladder (--ladder rs, overnight task 4)"
+sh tools/demo.sh $PORTS --no-color --strategy adaptive --ladder rs --schedule toll:40,hospital:100,toll:200 \
+    --window 8 --seed 42 --count 200 --rtt-ms 1 --delay-ms 0 --idle-timeout-ms 3000 >"$OUT" 2>&1
+check "rs-ladder run ok" [ $? -eq 0 ]
+check "rs-ladder every frame accounted once" [ "$(val received)" = 200 ]
+check "vehicle announces the all-RS ladder" grep -q 'all-RS ladder' "$OUT"
+check "starts on RS t=2 and changes level" grep -q 'LEVEL .* -> L[0-4] RS(' "$OUT"
+check "only RS codes on the air" eval '! grep -q "code=\(hamming\|bch\|none\)" "$OUT"'
+check "rs-ladder mostly correct (>= 190)" [ "$(val correct)" -ge 190 ]
+
 echo "== integration: live JSON-lines log + dashboard server"
 sh tools/demo.sh $PORTS --no-color --quiet --strategy harq --code hamming74 --seed 2 --count 25 \
     --rtt-ms 1 --delay-ms 0 --idle-timeout-ms 3000 --jsonl results/tmp/live_test.jsonl >"$OUT" 2>&1
@@ -141,6 +151,12 @@ check "seeds csv header" grep -q '^strategy,code,channel,seeds,frames,success_me
 check "seeds csv: 3 channels x 12 rows" [ "$(grep -c ',3,40,' results/tmp/seeds_smoke.csv)" -eq 36 ]
 check "seeds raw csv: one row per seed" [ "$(grep -c '^adaptive,ladder,schedule,' results/tmp/seeds_smoke_raw.csv)" -eq 3 ]
 check "paired differences written" grep -q '^schedule,adaptive,harq_rs_t8,goodput,3,' results/tmp/seeds_smoke_diff.csv
+./$BIN/bench --strategies --seeds 2 --ladder rs --schedule toll:30,hospital:30 --frames 40 \
+    --out results/tmp/seeds_rs_smoke.csv >"$OUT" 2>&1
+check "bench --ladder rs --seeds ok" [ $? -eq 0 ]
+check "rs ladder row present" grep -q '^adaptive,ladder_rs,schedule,2,' results/tmp/seeds_rs_smoke.csv
+check "mixed ladder row kept for pairing" grep -q '^adaptive,ladder,schedule,2,' results/tmp/seeds_rs_smoke.csv
+check "paired rs - mixed written" grep -q '^schedule,adaptive_rs,adaptive_mixed,goodput,2,' results/tmp/seeds_rs_smoke_diff.csv
 if command -v python3 >/dev/null 2>&1 && python3 -c "import matplotlib" 2>/dev/null; then
     python3 tools/plot.py results/tmp/seeds_smoke.csv --outdir results/tmp >"$OUT" 2>&1
     check "CI plot runs" [ $? -eq 0 ]

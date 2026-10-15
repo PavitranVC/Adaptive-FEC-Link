@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "bits.h"
+#include "adapt.h"
 #include "cli.h"
 #include "fec.h"
 #include "frame.h"
@@ -135,6 +136,7 @@ int main(int argc, char **argv) {
     cli_defaults(&o);
     int rc = cli_parse(&o, argc, argv);
     if (rc) return rc > 0 ? 0 : 2;
+    ladder_select(o.ladder);          /* before any controller / level lookup */
     setvbuf(stdout, NULL, _IOLBF, 0);
     term_init(o.color);
     install_stop_handler();

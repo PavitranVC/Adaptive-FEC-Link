@@ -3,6 +3,12 @@
  *
  * CODE LADDER (weakest/cheapest -> strongest):
  *     L0 none  ->  L1 Hamming(7,4)  ->  L2 BCH(15,7)  ->  L3 BCH(31,16)  ->  L4 RS t=4  ->  L5 RS t=8
+ * ALTERNATIVE LADDER `--ladder rs` (overnight task 4, a NEW experiment, see DECISIONS.md):
+ *     L0 RS t=1 (rate 0.889) -> L1 RS t=2 (0.800) -> L2 RS t=4 (0.667) -> L3 RS t=6 (0.571)
+ *     -> L4 RS t=8 (0.500): every step down REALLY saves parity.
+ * The ladder is chosen once per process (ladder_select), BEFORE any controller starts; vehicle and
+ * tollgate must use the same one, since feedback carries level numbers (tools/demo.sh passes the
+ * same flags to both).
  *
  * INPUT: the receiver's sliding window over the last W frames at the current level (window.h):
  *     f    = win_fail / win_n                  measured frame failure rate
@@ -35,6 +41,13 @@
 #include "fec.h"
 #include "feedback.h"
 
+typedef enum { LADDER_MIXED = 0, LADDER_RS = 1 } ladder_id_t;
+
+void ladder_select(ladder_id_t id);               /* process-wide, default LADDER_MIXED */
+ladder_id_t ladder_selected(void);
+const char *ladder_name(ladder_id_t id);          /* "mixed" / "rs" */
+int ladder_from_name(const char *name, ladder_id_t *out);   /* 0 ok, -1 unknown */
+
 int ladder_levels(void);
 fec_config_t ladder_config(int level);
 const char *ladder_label(int level);              /* e.g. "L2 BCH(15,7)" */
@@ -49,7 +62,7 @@ typedef struct {
     double up_threshold;   /* default 0.20 */
     double down_threshold; /* default 0.05 */
     int start_level;       /* default 1 (Hamming(7,4)) */
-    int min_level, max_level;
+    int min_level, max_level;  /* max_level is clamped to the selected ladder by adapt_init */
     int max_hold;          /* probe back-off cap in windows (default 16) */
 } adapt_params_t;
 
