@@ -1,2 +1,2 @@
-# Python is used ONLY for plotting (tools/plot.py) and, in week 2, the dashboard.
+# Python is used ONLY for plotting (tools/plot.py) and the live dashboard (tools/dashboard.py, standard library only).
 matplotlib>=3.5

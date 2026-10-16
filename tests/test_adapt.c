@@ -27,7 +27,7 @@ TEST(ladder_is_valid_and_ordered) {
     }
 }
 
-/* Overnight task 4: the alternative all-RS ladder (--ladder rs), a NEW experiment. */
+/* v0.3 experiment (DD-24): the alternative all-RS ladder (--ladder rs), a NEW experiment. */
 TEST(rs_ladder_is_valid_and_ordered_by_code_rate) {
     ladder_id_t id;
     CHECK(ladder_from_name("mixed", &id) == 0 && id == LADDER_MIXED);

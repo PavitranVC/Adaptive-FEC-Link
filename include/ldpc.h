@@ -1,6 +1,6 @@
 /*
  * ldpc.h - a small (3,6)-regular LDPC code, n = 256, k = 128, with Gallager's bit-flipping
- * decoder (overnight run C, optional stretch).
+ * decoder (v0.4, optional stretch).
  *
  * PARITY-CHECK MATRIX H (m x n = 128 x 256, binary)
  *   A word x (n bits) is a codeword  <=>  H x = 0 (mod 2).  Row j of H is one parity check:

@@ -52,7 +52,7 @@ check "bch3116 run ok" [ $? -eq 0 ]
 check "bch3116 received 30" [ "$(val received)" = 30 ]
 check "bch3116 code reported" [ "$(val code)" = bch3116 ]
 
-echo "== integration: LDPC(256,128) bit flipping end to end (overnight C)"
+echo "== integration: LDPC(256,128) bit flipping end to end (v0.4)"
 sh tools/demo.sh $PORTS --no-color --profile toll --code ldpc --seed 4 --count 30 \
     --delay-ms 0 --idle-timeout-ms 3000 >"$OUT" 2>&1
 check "ldpc run ok" [ $? -eq 0 ]
@@ -114,7 +114,7 @@ check "controller stepped up" grep -q 'LEVEL UP' "$OUT"
 check "controller stepped back down" grep -q 'LEVEL DOWN' "$OUT"
 check "adaptive mostly correct (>= 190)" [ "$(val correct)" -ge 190 ]
 
-echo "== integration: adaptive with the all-RS ladder (--ladder rs, overnight task 4)"
+echo "== integration: adaptive with the all-RS ladder (--ladder rs, v0.3 experiment)"
 sh tools/demo.sh $PORTS --no-color --strategy adaptive --ladder rs --schedule toll:40,hospital:100,toll:200 \
     --window 8 --seed 42 --count 200 --rtt-ms 1 --delay-ms 0 --idle-timeout-ms 3000 >"$OUT" 2>&1
 check "rs-ladder run ok" [ $? -eq 0 ]

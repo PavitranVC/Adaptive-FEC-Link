@@ -4,7 +4,7 @@
  * For each frame: draw a random 96-bit tag ID (seeded), append CRC-32, FEC-encode the 128-bit
  * payload and send it over UDP to the channel (127.0.0.1:9000 by default).
  *
- * --strategy fec (default)  send once, no feedback (week-1 behaviour, unchanged)
+ * --strategy fec (default)  send once, no feedback (v0.1 behaviour, unchanged)
  * --strategy arq|harq|adaptive
  *     stop-and-wait: after each transmission wait for ACK/NAK from the tollgate on the feedback
  *     port (9002) for at most --timeout-ms; retransmit on NAK/timeout up to --max-retries.

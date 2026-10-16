@@ -28,7 +28,7 @@ typedef enum {
     CODE_BCH157 = 4,
     CODE_BCH3116 = 5,
     CODE_RS = 6,
-    CODE_LDPC = 7        /* overnight run C: (3,6)-regular LDPC(256,128), bit flipping */
+    CODE_LDPC = 7        /* v0.4: (3,6)-regular LDPC(256,128), bit flipping */
 } code_id_t;
 
 typedef struct {

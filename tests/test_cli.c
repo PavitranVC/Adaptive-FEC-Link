@@ -67,10 +67,10 @@ TEST(rejects_bad_input) {
     CHECK(parse(&o, 3, a5) != 0);
 }
 
-TEST(week2_flags) {
+TEST(strategy_and_adaptive_flags) {
     cli_opts_t o;
     cli_defaults(&o);
-    CHECK(o.strategy == STRAT_FEC);                 /* default keeps week-1 behaviour */
+    CHECK(o.strategy == STRAT_FEC);                 /* default keeps v0.1 behaviour */
     const char *argv[] = {"x", "--strategy", "harq", "--rtt-ms", "30", "--timeout-ms", "150",
                           "--max-retries", "6", "--fb-drop", "0.1", "--window", "16",
                           "--up-threshold", "0.2", "--down-threshold", "0.02", "--start-level", "3",
@@ -152,7 +152,7 @@ int main(void) {
     RUN(common_flags);
     RUN(model_defaults_to_profile_model);
     RUN(rejects_bad_input);
-    RUN(week2_flags);
+    RUN(strategy_and_adaptive_flags);
     RUN(failure_injection_flags);
     RUN(seeds_flag);
     RUN(ladder_flag);

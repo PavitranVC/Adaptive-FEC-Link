@@ -3,7 +3,7 @@
  *
  *  off size field
  *   0   2   magic "FL"
- *   2   1   version (1)
+ *   2   1   version (PACKET_VERSION = 2; 1 in v0.1)
  *   3   1   type: 1 = DATA, 2 = END (seq = number of frames sent)
  *   4   1   code id (see fec.h)
  *   5   1   rs_t (Reed-Solomon parameter)

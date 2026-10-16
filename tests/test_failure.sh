@@ -1,5 +1,5 @@
 #!/bin/sh
-# Failure-injection integration test (PLAN.md week 2): every receiver must LOG and DROP bad
+# Failure-injection integration test (docs/ROADMAP.md, v0.2): every receiver must LOG and DROP bad
 # input and never crash; a broken setup must fail loudly with a non-zero exit code.
 # Uses ports 19200-19202 so it never clashes with a demo or tests/test_integration.sh.
 cd "$(dirname "$0")/.." || exit 1

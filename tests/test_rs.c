@@ -100,7 +100,7 @@ TEST(too_many_errors_fail_or_give_a_codeword) {
     CHECK(detected > 2500);   /* shortened codes detect almost every overload */
 }
 
-/* Found by `make sanitize` (overnight task 2): on a detected failure rs_decode used to return
+/* Found by `make sanitize` (v0.3): on a detected failure rs_decode used to return
  * without writing `data`, so the caller decoded uninitialized stack bytes (non-deterministic ID
  * and CRC). Like bch_decode it must output the RECEIVED data bytes, untouched. */
 TEST(failure_outputs_received_data_bytes) {

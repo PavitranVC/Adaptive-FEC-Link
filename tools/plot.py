@@ -2,11 +2,11 @@
 """Plots for the FEC benchmark.
 
 usage: python3 tools/plot.py results/bench.csv [--suffix _hospital] [--outdir results]
-       python3 tools/plot.py results/bench_strategy.csv    (strategy comparison, week 2)
+       python3 tools/plot.py results/bench_strategy.csv    (strategy comparison, since v0.2)
        python3 tools/plot.py results/adaptive_trace.csv    (adaptive code level over time)
        python3 tools/plot.py results/bench_strategy_seeds.csv  (multi-seed means + 95% CI error bars)
        python3 tools/plot.py results/bench_ladder_rs_seeds.csv (all-RS ladder experiment)
-       python3 tools/plot.py results/bench_ldpc.csv --suffix _ldpc   (LDPC vs BCH/RS, overnight C;
+       python3 tools/plot.py results/bench_ldpc.csv --suffix _ldpc   (LDPC vs BCH/RS, v0.4;
                                     --suffix _ldpc_hospital for results/bench_ldpc_hospital.csv)
 
 Writes PNGs into results/:

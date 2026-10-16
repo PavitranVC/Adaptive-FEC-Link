@@ -1,5 +1,5 @@
 /* Tests for the (3,6)-regular LDPC code and the Gallager bit-flipping decoder (include/ldpc.h).
- * Written before src/ldpc.c (overnight run C). */
+ * Written before src/ldpc.c (v0.4, tests first). */
 #include <string.h>
 #include "testlib.h"
 #include "ldpc.h"

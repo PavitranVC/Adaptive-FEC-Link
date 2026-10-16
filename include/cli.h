@@ -30,7 +30,7 @@ typedef struct {
     char host[64];             /* --host       default 127.0.0.1 */
     int channel_port;          /* --channel-port  9000 (vehicle -> channel) */
     int tollgate_port;         /* --tollgate-port 9001 (channel -> tollgate) */
-    int feedback_port;         /* --feedback-port 9002 (tollgate -> vehicle, week 2) */
+    int feedback_port;         /* --feedback-port 9002 (tollgate -> vehicle, ACK/NAK since v0.2) */
     int color;                 /* --color / --no-color, -1 = auto */
     int show_bits;             /* --show-bits: tollgate prints the coloured bit map */
     int quiet;                 /* --quiet: no per-frame lines */
@@ -39,7 +39,7 @@ typedef struct {
     const char *summary_path;  /* --summary-file FILE: key=value summary */
     const char *out_path;      /* --out FILE (bench) */
     long frames;               /* --frames N (bench) */
-    /* week 2: retransmission strategies and the adaptive controller */
+    /* v0.2: retransmission strategies and the adaptive controller */
     strategy_t strategy;       /* --strategy {fec,arq,harq,adaptive}  default fec */
     int rtt_ms;                /* --rtt-ms        simulated round-trip time, default 20 */
     int timeout_ms;            /* --timeout-ms    stop-and-wait timeout, default 100 */
@@ -57,7 +57,7 @@ typedef struct {
     ladder_id_t ladder;        /* --ladder {mixed,rs}  adaptive code ladder, default mixed */
     int seeds;                 /* --seeds N       bench --strategies: N seeds, mean + 95% CI (0 = off) */
     double corrupt_header;     /* --corrupt-header P  channel: corrupt the header of a DATA packet w.p. P */
-    const char *compare_codes; /* --compare-codes a,b,c  bench: sweep only these codes (overnight C) */
+    const char *compare_codes; /* --compare-codes a,b,c  bench: sweep only these codes (v0.4) */
 } cli_opts_t;
 
 void cli_defaults(cli_opts_t *o);

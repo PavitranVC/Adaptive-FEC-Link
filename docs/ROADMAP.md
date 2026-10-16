@@ -1,12 +1,14 @@
-# PLAN
+# Roadmap
 
 Each phase: tests first -> implementation -> `make test` green -> `git status` clean of build
-outputs -> commit `phaseN: <summary>` -> push.
+outputs -> commit -> push. Versions as defined in [ARCHITECTURE_HISTORY.md](ARCHITECTURE_HISTORY.md);
+current state in [STATUS.md](STATUS.md).
 
-## Week 1
+## v0.1 - core FEC pipeline (phases 0-6)
 
-- [x] **Phase 0 - Scaffolding**: CLAUDE.md, README.md, PLAN.md, PROGRESS.md, DECISIONS.md,
-      Makefile, .gitignore, requirements.txt, folder layout, test helper.
+- [x] **Phase 0 - Scaffolding**: contributor guide (now `CONTRIBUTING.md`), README.md, roadmap,
+      status and design-decision documents, Makefile, .gitignore, requirements.txt, folder
+      layout, test helper.
 - [x] **Phase 1 - Bit utilities, CRC-32, Hamming(7,4), Hamming(15,11), SECDED(8,4)**.
       Tests: every single-bit error at every position corrected; 2-bit error makes plain Hamming
       miscorrect and CRC-32 catches it; SECDED detects 2-bit errors.
@@ -25,35 +27,44 @@ outputs -> commit `phaseN: <summary>` -> push.
 - [x] **Phase 6 - (if time) Reed-Solomon** over GF(256), shortened, configurable t (default 4),
       configurable block interleaver, burst-correction tests, pipeline + benchmark.
 
-## Week 2
+## v0.2 - feedback, ARQ, adaptive FEC, dashboard
 
-- [x] Ground-truth integrity check (decision #6): receiver module + truth-stripping test.
+- [x] Ground-truth integrity check (DD-06): receiver module + truth-stripping test.
 - [x] Stop-and-Wait ARQ baseline (simulated RTT / timeout) - the "retransmission" strawman.
 - [x] Hybrid ARQ: FEC first, retransmit only when the CRC fails (uses feedback port 9002).
 - [x] Adaptive controller: receiver feedback steps the code level up/down
       (hamming74 -> bch157 -> bch3116 -> rs ...) with hysteresis.
 - [x] Live Python web dashboard (tollgate --jsonl + tools/dashboard.py, `make dashboard`).
 - [x] Deliberate failure-injection testing (malformed packets, lost END, port in use, bursts
-      longer than the code can handle, header corruption experiment).
+      longer than the code can handle, header corruption experiment) - delivered in v0.3.
 - [x] Final report plots (both profiles, all codes, ARQ vs FEC vs HARQ vs adaptive).
-- [x] *Optional stretch*: LDPC with a bit-flipping decoder (overnight C, see below).
+- [x] *Optional stretch*: LDPC with a bit-flipping decoder - delivered in v0.4.
 
-## Overnight A (branch `overnight-a`)
+## v0.3 - evaluation: fair baselines, goodput, RTT, hardening
 
+- [x] Single demo guide (`docs/DEMO.md`).
+- [x] HARQ + RS t=4 / t=8 baselines, goodput metric, honest result tables.
+- [x] RTT sensitivity 5 / 20 / 50 ms.
 - [x] Task 1: failure injection (`--corrupt-header`, malformed/truncated/duplicate packets, lost END,
       port in use, over-long bursts, 100% feedback loss) + header-corruption experiment.
 - [x] Task 2: `make sanitize` (ASan + UBSan, all tests) + seeded fuzz test of the parsers.
 - [x] Task 3: `bench --strategies --seeds N` (mean + 95% CI), paired differences, CI plot.
 - [x] Task 4: all-RS ladder experiment (`--ladder rs`), pre-registered, reported.
+- [x] Verification pass A: design-decision numbers checked against `results/*.csv`.
 
-## Overnight B (branch `overnight-b`)
+## v0.4 - CI, report, LDPC, documentation
 
-- [x] Task 5: GitHub Actions CI (`.github/workflows/ci.yml`) - workflow added, not yet run.
-- [x] Task 6: `docs/REPORT.md` draft (numbers from results/*.csv, PROGRESS, DECISIONS).
-- [x] Run C: optional LDPC (done, branch `overnight-c`).
-- [ ] Next (Run D, local): tag, local test and rehearsal.
+- [x] Task 5: GitHub Actions CI (`.github/workflows/ci.yml`) - ubuntu + macOS `make test`, ubuntu
+      `make sanitize`; all runs green.
+- [x] Task 6: `docs/REPORT.md` draft (numbers from results/*.csv, STATUS, DESIGN_DECISIONS) +
+      verification pass B.
+- [x] Optional LDPC (below).
+- [x] Demo guide fixes after a real WSL run; measured timings.
+- [x] Professional documentation: `CONTRIBUTING.md`, `docs/ALGORITHMS.md`, `docs/DEVELOPMENT.md`,
+      design records DD-NN, architecture history, technical branch names and version tags.
+- [ ] Next (local): `make test` on the team's own macOS/WSL machines and rehearsal.
 
-## Overnight C (branch `overnight-c`, optional stretch)
+### Optional stretch: LDPC
 
 - [x] Step 1: (3,6)-regular LDPC(256,128): seeded PEG-style H (no 4-cycles, full rank), systematic
       encoder by Gaussian elimination. Tests first (`tests/test_ldpc.c`).
@@ -62,4 +73,9 @@ outputs -> commit `phaseN: <summary>` -> push.
       success never returned for a non-codeword.
 - [x] Step 3: `--code ldpc` in the FEC registry, `bin/bench --compare-codes`, `results/bench_ldpc*.csv`,
       `results/*_ldpc*.png`; default sweep and every existing result unchanged.
-- [x] Step 4: honest comparison vs BCH/RS (DECISIONS.md "Overnight C", README, REPORT 7.6).
+- [x] Step 4: honest comparison vs BCH/RS (DESIGN_DECISIONS.md "v0.4 - LDPC", README, REPORT 7.6).
+
+## Future work
+
+See [REPORT.md](REPORT.md) section 10: header CRC-16, soft-combining HARQ, soft-decision LDPC,
+a controller that can pick the best fixed code, real channel traces / hardware in the loop.

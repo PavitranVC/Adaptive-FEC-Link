@@ -9,7 +9,7 @@
  * Per frame it logs: seq, code, bits flipped (truth), bits corrected, CRC result, class,
  * decode latency (FEC decode + CRC check, microseconds).
  *
- * Week 2: when a frame's header says strategy != fec, the tollgate answers every transmission
+ * Since v0.2: when a frame's header says strategy != fec, the tollgate answers every transmission
  * with ACK (it now holds a CRC-valid copy of that seq) or NAK (CRC failed) on the feedback port
  * (9002), after a simulated return propagation of rtt/2. The feedback also carries the sliding
  * window statistics used by the adaptive controller (window.h). Retransmissions of the same seq

@@ -1,7 +1,7 @@
 # Adaptive Multi-Error FEC Link Layer for High-Interference Environments
 
 *Draft report. Every number below is copied from `results/*.csv` (regenerated with `make bench`),
-`PROGRESS.md` or `DECISIONS.md`. A number that was not measured is written "not measured".
+[`STATUS.md`](STATUS.md) or [`DESIGN_DECISIONS.md`](DESIGN_DECISIONS.md). A number that was not measured is written "not measured".
 Noise parameters, the round-trip time and the bit rate are modelling assumptions, not measurements.*
 
 ## 1. Abstract
@@ -44,9 +44,9 @@ flowchart LR
 
 Frame: `header (magic, ver, type, code, rs_t, il, seq, nbits, attempt, strat)` then
 `FEC(ID96 || CRC32)` = 128 payload bits before coding. The header is **not** corrupted by the
-channel (decision #1; see section 7.5 for what happens when it is). The channel appends an
+channel (design record DD-01; see section 7.5 for what happens when it is). The channel appends an
 evaluation-only ground-truth sidecar; the decoder never reads it (checked by
-`tests/test_receiver.c`, decision #6). Each frame is classified:
+`tests/test_receiver.c`, DD-06). Each frame is classified:
 
 * `CORRECT` - CRC passes and ID equals the truth;
 * `DETECTED_FAIL` - CRC fails or the decoder flags an uncorrectable block (the system knows not to bill);
@@ -79,7 +79,7 @@ the binomial model predicts the cheaper code fails below 0.05, probe back-off).
   survives bursts that destroy bit-level codes.
 * **Block interleaver** (generic, bit level, depth d): write row-wise, send column-wise, so a burst of
   L bits becomes about L/d errors per codeword. It helps bit-oriented codes against bursts
-  (e.g. BCH(31,16) + d=8) but *hurts* RS (decision #12: RS t=4 on hospital drops from 83.4% to
+  (e.g. BCH(31,16) + d=8) but *hurts* RS (DD-15: RS t=4 on hospital drops from 83.4% to
   59.8% with d=8), because it spreads one burst over more bytes.
 
 **LDPC(256,128) (optional stretch, section 7.6).** A codeword is any x with H x = 0 for a sparse
@@ -95,11 +95,11 @@ All randomness goes through the seeded RNG in `include/rng.h`, so runs are repro
 
 * **BSC** - independent flips with probability p.
 * **Gilbert-Elliott** - two-state Markov chain (good/bad) with flip probabilities e_good/e_bad;
-  state persists across frames and starts in the stationary distribution (decision #2).
+  state persists across frames and starts in the stationary distribution (DD-02).
 * **Burst** - one burst of length L per frame with probability p_frame; first/last bit flipped, inner
-  bits with probability 0.5 (decision #3).
+  bits with probability 0.5 (DD-03).
 
-`--p` means p, p_gb or p_frame depending on the model (decision #4). The Python/C values of the
+`--p` means p, p_gb or p_frame depending on the model (DD-04). The Python/C values of the
 profiles are listed in section 2. **They are modelling assumptions.**
 
 ## 6. Experiments
@@ -115,7 +115,7 @@ profiles are listed in section 2. **They are modelling assumptions.**
 | E7 | LDPC(256,128) bit flipping vs BCH(15,7)/BCH(31,16)/RS t=4/RS t=8, both profiles (optional stretch) | `make bench` | `bench_ldpc.csv`, `bench_ldpc_hospital.csv` |
 
 Setup for E2-E5: schedule `toll:2000,hospital:2000,toll:2000` (counted in transmissions), 5000 frames,
-RTT 20 ms, timeout 100 ms, max 4 retries, simulated bit rate 160 kbit/s (assumed, decision #18).
+RTT 20 ms, timeout 100 ms, max 4 retries, simulated bit rate 160 kbit/s (assumed, DD-13 / DD-14).
 **Goodput** = correct frames x 128 payload bits / all coded bits on the air (parity and retransmissions
 included; the header is not counted).
 
@@ -166,7 +166,7 @@ Paired differences on the same seeds (`bench_strategy_seeds_diff.csv`), adaptive
 | retx / frame | +0.0506 +- 0.0023 | -0.0194 +- 0.0025 |
 | p99 latency (ms) | +0.0022 +- 0.0009 | -8.74 +- 5.06 |
 
-The p99 latency of HARQ + RS t=4 is bimodal across seeds (32.4 ms in 11 seeds, 53.6 ms in 9; DECISIONS.md, task 3), so its interval is approximate.
+The p99 latency of HARQ + RS t=4 is bimodal across seeds (32.4 ms in 11 seeds, 53.6 ms in 9; [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md), DD-23), so its interval is approximate.
 Per channel (20 seeds) the adaptive controller reaches success 1.0000 / goodput 0.5333 on toll alone and 0.9995 / 0.4736 on hospital alone; HARQ RS t=4 reaches 0.6441 on toll and 0.5588 on hospital.
 
 ![goodput vs success, 20-seed CIs](../results/goodput_vs_success_ci.png)
@@ -184,13 +184,13 @@ p99 latency in ms (the pipeline simulates RTT split rtt/2 + rtt/2):
 | HARQ RS t=8 | 10.711 | 33.211 | 78.211 |
 | Adaptive (mixed) | 10.712 | 33.212 | 78.212 |
 
-Rankings do not change with RTT; goodput does not depend on RTT (DECISIONS.md). The RTT values are assumptions.
+Rankings do not change with RTT; goodput does not depend on RTT (DESIGN_DECISIONS.md). The RTT values are assumptions.
 
 ![RTT sensitivity](../results/rtt_sensitivity.png)
 
 ### 7.4 All-RS ladder experiment (E5, new, pre-registered)
 
-Hypothesis written and committed before any run (DECISIONS.md, task 4): an adaptive ladder of RS t=1,2,4,6,8
+Hypothesis written and committed before any run ([DESIGN_DECISIONS.md](DESIGN_DECISIONS.md), DD-24): an adaptive ladder of RS t=1,2,4,6,8
 (rates 0.889 .. 0.500) reaches HARQ + RS t=8 reliability at clearly higher goodput than the mixed ladder.
 Nothing was tuned afterwards. 20 seeds, schedule channel:
 
@@ -212,7 +212,7 @@ and a lower p99 latency, not goodput.
 
 Covered by `tests/test_packet.c`, `tests/test_fuzz.c` (450k fuzzed inputs), `tests/test_failure.sh`
 and `make sanitize` (ASan + UBSan, no findings after the fixes). Real bugs found and fixed
-(DECISIONS.md, overnight A tasks 1-2): an empty datagram stopped the tollgate/channel; an invalid packet
+([DESIGN_DECISIONS.md](DESIGN_DECISIONS.md), v0.3 failure injection and sanitizers): an empty datagram stopped the tollgate/channel; an invalid packet
 could steal a sequence number; `SO_REUSEADDR` let two processes bind one UDP port; the RS decoder returned uninitialized
 data on failure. Bursts longer than any code (L = 4096) give 100% DETECTED_FAIL and no SILENT_WRONG; 100% feedback loss
 makes the vehicle give up after max retries.
@@ -234,7 +234,7 @@ makes the vehicle give up after max retries.
 At P = 0.2 with HARQ the tollgate reports 2003 CORRECT of 2000 frames sent: a flipped seq creates a phantom frame the
 tollgate cannot recognise. Not fixed (needs a wire-format change; proposed fix: a CRC-16 over the header).
 
-### 7.6 Optional stretch: LDPC(256,128) with Gallager bit flipping (E7, overnight C)
+### 7.6 Optional stretch: LDPC(256,128) with Gallager bit flipping (E7, v0.4)
 
 (3,6)-regular H (128 x 256) built from a seeded RNG with a PEG-style rule (no 4-cycles; girth 6),
 systematic encoder from Gaussian elimination, hard-decision bit flipping (flip every bit that
@@ -266,7 +266,7 @@ profile. It is not on the adaptive ladder. Single seed; not tuned after seeing r
 
 * **Adaptive does not clearly beat fixed HARQ + RS t=4.** On our channel the best fixed strategy has
   higher goodput (0.6126 vs 0.5043 mixed, 0.5841 all-RS). Adaptive's measurable advantages over it are fewer retransmissions per frame and a lower mean p99 latency (both with caveats above); over always-RS t=8 the goodput advantage is real but small (+0.0133).
-* The original expectation "strongest-code reliability at clearly lower overhead" did **not** hold with the mixed ladder (decision, final polish); the cause is the ladder order (its low rungs have lower code rate than RS t=4).
+* The original expectation "strongest-code reliability at clearly lower overhead" did **not** hold with the mixed ladder (DD-21 notes, v0.3 fair-comparison analysis); the cause is the ladder order (its low rungs have lower code rate than RS t=4).
 * Noise parameters, RTT (20 ms), timeout, 160 kbit/s bit rate and the burst model are modelling assumptions; conclusions
   hold for this simulated channel and may not transfer to a real one.
 * Software simulation only: **no hardware, no over-the-air measurement.** Decode times are of the simulation host.

@@ -4,7 +4,7 @@ This is the single guide for setting up, running and presenting the project.
 Sections 0.x are one-time setup; sections 1-5 are the demos; then troubleshooting and a
 2-minute talking script.
 For how the architecture changed between versions and what failed, see the
-[Architecture history](ARCHITECTURE_HISTORY.md).
+[Architecture history](ARCHITECTURE_HISTORY.md); the formulas behind every code are in [ALGORITHMS.md](ALGORITHMS.md).
 
 ## 0.1 One-time setup (per laptop)
 
@@ -75,7 +75,7 @@ All commands below are run from the repository root after `make`.
 ```sh
 make demo                      # TOLL_PLAZA profile, Hamming(7,4), 20 frames, 250 ms apart
 make demo-hospital             # HOSPITAL_IMAGING profile (bursty Gilbert-Elliott channel)
-make demo CODE=bch157          # any code: none hamming74 hamming1511 secded84 bch157 bch3116 rs
+make demo CODE=bch157          # any code: none hamming74 hamming1511 secded84 bch157 bch3116 rs ldpc
 make demo COUNT=50 DELAY=100 SEED=7
 ```
 
@@ -109,7 +109,7 @@ make demo-hospital CODE=rs                 # Reed-Solomon shrugs them off
 sh tools/demo.sh --profile hospital --code bch3116 --interleave 8 --count 20 --delay-ms 250
 ```
 
-### Retransmission strategies (week 2)
+### Retransmission strategies (since v0.2)
 
 ```sh
 make demo-arq                  # Stop-and-Wait ARQ: uncoded + CRC-32, retransmit on NAK/timeout
@@ -130,16 +130,16 @@ the tollgate prints `-> ACK/NAK` after each frame and `seq=5#1` for retransmissi
 Extra flags: `--rtt-ms` (simulated round trip, default 20), `--timeout-ms` (100),
 `--max-retries` (4), `--fb-drop` (0). With `--strategy fec` (default) nothing changes.
 
-Header corruption (failure injection, breaks decision #1 on purpose): the channel flips 1-4
+Header corruption (failure injection, breaks design record DD-01 on purpose): the channel flips 1-4
 random bits in the 16-byte header of 5% of the packets. Receivers log `ignoring malformed packet`
 or `dropping frame ... unknown code/size/strategy` and keep running; the channel prints
-`HEADER CORRUPTED`. `sh tools/header_experiment.sh` measures the cost (see DECISIONS.md #1).
+`HEADER CORRUPTED`. `sh tools/header_experiment.sh` measures the cost (see [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md), DD-01).
 
 ```sh
 sh tools/demo.sh --code rs --corrupt-header 0.05 --count 100 --delay-ms 50
 ```
 
-### Adaptive FEC (week 2, the highlight)
+### Adaptive FEC (since v0.2, the highlight)
 
 ```sh
 make demo-adaptive             # schedule toll:60,hospital:80,toll:100, 240 frames, ~14 s
@@ -159,7 +159,7 @@ within seconds), `--up-threshold` (0.20), `--down-threshold` (0.05), `--start-le
 `--schedule profile:transmissions,...` (channel). Ladder: L0 uncoded, L1 Hamming(7,4),
 L2 BCH(15,7), L3 BCH(31,16), L4 RS t=4, L5 RS t=8. HARQ retransmits on CRC failure.
 
-### Live dashboard (week 2)
+### Live dashboard (since v0.2)
 
 ```sh
 make dashboard                 # prints: open http://127.0.0.1:8050/  then runs the adaptive demo
@@ -195,7 +195,7 @@ Use the **same flags** in all three terminals; start them in this order:
 ```
 
 Ports (UDP, 127.0.0.1): vehicle -> channel **9000**, channel -> tollgate **9001**,
-tollgate -> vehicle **9002** (reserved for week-2 feedback). Change them with
+tollgate -> vehicle **9002** (ACK/NAK feedback for `arq`, `harq` and `adaptive`). Change them with
 `--channel-port`, `--tollgate-port`, `--feedback-port` (give the same values to all three).
 
 ## 3. Side-by-side comparison
@@ -212,7 +212,7 @@ Same seed means the same sequence of tag IDs and the same noise process for ever
 
 | flag | meaning |
 |---|---|
-| `--code` | `none`, `hamming74`, `hamming1511`, `secded84`, `bch157`, `bch3116`, `rs` |
+| `--code` | `none`, `hamming74`, `hamming1511`, `secded84`, `bch157`, `bch3116`, `rs`, `ldpc` |
 | `--profile` | `toll` (TOLL_PLAZA) or `hospital` (HOSPITAL_IMAGING) |
 | `--model` | `bsc`, `ge` (Gilbert-Elliott), `burst`; default = profile's model (toll: bsc, hospital: ge) |
 | `--p` | bsc: flip probability; ge: P(good->bad) per bit; burst: probability a frame gets a burst |

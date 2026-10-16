@@ -1,9 +1,9 @@
 /*
- * adapt.h - the adaptive FEC controller (week-2 task 3) and the code ladder it climbs.
+ * adapt.h - the adaptive FEC controller (v0.2) and the code ladder it climbs.
  *
  * CODE LADDER (weakest/cheapest -> strongest):
  *     L0 none  ->  L1 Hamming(7,4)  ->  L2 BCH(15,7)  ->  L3 BCH(31,16)  ->  L4 RS t=4  ->  L5 RS t=8
- * ALTERNATIVE LADDER `--ladder rs` (overnight task 4, a NEW experiment, see DECISIONS.md):
+ * ALTERNATIVE LADDER `--ladder rs` (v0.3, a NEW pre-registered experiment, see docs/DESIGN_DECISIONS.md DD-24):
  *     L0 RS t=1 (rate 0.889) -> L1 RS t=2 (0.800) -> L2 RS t=4 (0.667) -> L3 RS t=6 (0.571)
  *     -> L4 RS t=8 (0.500): every step down REALLY saves parity.
  * The ladder is chosen once per process (ladder_select), BEFORE any controller starts; vehicle and

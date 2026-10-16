@@ -13,11 +13,11 @@
  * Besides every registered code (RS with --rs-t, default 4) it also benchmarks interleaved
  * variants "hamming74+il<D>" and "bch3116+il<D>" (D = --interleave if > 1, else 8).
  * Optional filters: --code X, --model Y. Usage: bin/bench --profile toll --frames 5000 --out f.csv
- * LDPC (overnight C) is left out of that default sweep; --compare-codes bch157,bch3116,rs,rs_t8,ldpc
+ * LDPC (v0.4) is left out of that default sweep; --compare-codes bch157,bch3116,rs,rs_t8,ldpc
  * sweeps exactly the listed codes (same CSV format, same seeds, so the BCH/RS rows equal the
  * ones in the default sweep) -> results/bench_ldpc*.csv in `make bench`.
  *
- * STRATEGY MODE (week 2):  bin/bench --strategies --frames N --out results/bench_strategy.csv
+ * STRATEGY MODE (since v0.2):  bin/bench --strategies --frames N --out results/bench_strategy.csv
  *   Compares fec (fixed codes) vs arq vs harq vs adaptive with the link simulator (linksim.h,
  *   simulated clock: RTT, timeout, airtime at 160 kbit/s). Channels: TOLL_PLAZA and
  *   HOSPITAL_IMAGING (profile default models) and, with --schedule, the scheduled channel
@@ -26,7 +26,7 @@
  *        mean_latency_ms,p99_latency_ms,mean_code_rate,level_changes,goodput
  *   goodput = CORRECT frames * 128 payload bits / all coded bits sent (parity + retransmissions)
  *
- * MULTI-SEED MODE (overnight task 3):  bin/bench --strategies --seeds 20 [--schedule ...]
+ * MULTI-SEED MODE (since v0.3):  bin/bench --strategies --seeds 20 [--schedule ...]
  *   Runs the same comparison for seeds seed, seed+1, ..., seed+N-1 and writes, per row, the mean
  *   and the 95% confidence interval (Student t, N-1 degrees of freedom, see stats.h) of success
  *   rate, goodput, retransmissions/frame and p99 latency to --out (default
@@ -34,7 +34,7 @@
  *   <out>_diff.csv: PAIRED differences adaptive - HARQ+RS t=8 and adaptive - HARQ+RS t=4 on the
  *   same seeds (mean, 95% CI, significant = CI excludes 0). Without --seeds nothing changes.
  *
- * --ladder rs (overnight task 4, a NEW experiment): the adaptive row uses the all-RS ladder
+ * --ladder rs (v0.3, a NEW pre-registered experiment, DD-24): the adaptive row uses the all-RS ladder
  *   (code "ladder_rs"); in --seeds mode the original mixed-ladder adaptive row is added on the
  *   same seeds and <out>_diff.csv also holds adaptive_rs - adaptive_mixed. Default: mixed.
  */
@@ -115,7 +115,7 @@ static int build_variants(const cli_opts_t *o, int only_code, variant_t *vs) {
     for (int ci = 0; ci < fec_code_count(); ci++) {
         code_id_t code = fec_code_at(ci)->id;
         if (only_code && code != o->code) continue;
-        /* LDPC (overnight C) is benchmarked separately with --compare-codes, so the default
+        /* LDPC (v0.4) is benchmarked separately with --compare-codes, so the default
          * sweep - results/bench.csv and its plots - stays exactly as before. */
         if (code == CODE_LDPC && !only_code) continue;
         vs[nv].cfg = fec_config(code);
@@ -251,7 +251,7 @@ static int run_strategies(const cli_opts_t *o) {
 #define N_ROWS ((int)(sizeof STRAT_ROWS / sizeof STRAT_ROWS[0]))
 #define MAX_ROWS (N_ROWS + 1)
 /* With --ladder rs the original (mixed) adaptive row is run too, on the same seeds, so that
- * "all-RS ladder minus mixed ladder" is a paired comparison (overnight task 4). */
+ * "all-RS ladder minus mixed ladder" is a paired comparison (DD-24). */
 static const strat_row_t MIXED_ADAPTIVE_ROW = {"adaptive", STRAT_ADAPTIVE, CODE_NONE, 4, LADDER_MIXED + 1};
 #define MAX_CH 3
 enum { M_SUCCESS, M_GOODPUT, M_RETX, M_P99, N_METRICS };

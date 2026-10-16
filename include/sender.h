@@ -2,12 +2,12 @@
  * sender.h - the vehicle's transmission strategy as a small state machine, shared by the UDP
  * vehicle (bin/vehicle) and the in-process link simulator (bin/bench), so both run the same logic.
  *
- *  fec       send once with the fixed code, never wait for feedback (week-1 behaviour)
+ *  fec       send once with the fixed code, never wait for feedback (v0.1 behaviour)
  *  arq       Stop-and-Wait ARQ: send UNCODED (CRC-32 only), wait for ACK/NAK;
  *            retransmit on NAK or timeout, at most max_retries times
  *  harq      Hybrid ARQ type I: send with the fixed FEC code, retransmit only when the receiver
  *            reports a CRC failure after decoding (NAK) or the feedback times out
- *  adaptive  HARQ + adaptive code level (see adapt.h), week-2 task 3
+ *  adaptive  HARQ + adaptive code level (see adapt.h), since v0.2
  *
  * Stop-and-wait rules for lost/duplicate feedback:
  *  - feedback for another seq          -> stale duplicate, ignored

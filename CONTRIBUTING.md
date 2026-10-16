@@ -1,16 +1,17 @@
-# CLAUDE.md - working instructions for this repository
+# Contributing
 
-**Read `PROGRESS.md` first** - it says which phase is done, what is broken and the exact next step.
-Then skim `PLAN.md` (all phases + week-2 backlog) and `DECISIONS.md` (design choices; lines starting
-with 🔀 changed the project's direction and should be reviewed by the team).
+This file is the specification and the working agreement for the repository: what the system is,
+which interfaces are fixed, how the code is laid out and the rules every change follows.
+Current state and open problems: [`docs/STATUS.md`](docs/STATUS.md). Roadmap:
+[`docs/ROADMAP.md`](docs/ROADMAP.md). Design decisions: [`docs/DESIGN_DECISIONS.md`](docs/DESIGN_DECISIONS.md).
+Environment, test matrix, branch naming and release process: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
-**After every task: `make test`, check `git status` (no binaries/logs/CSVs staged), commit, push.**
-Commit messages for phases: `phaseN: <summary>`.
+**Before every commit: `make test` passes, `git status` shows no binaries, logs or CSVs staged.**
 
-## Project
+## Project specification
 
-"Adaptive Multi-Error FEC Link Layer for High-Interference Environments" - a university Computer
-Networks project that extends the approved project "Fast-Lane FEC for Automated Toll Booths".
+"Adaptive Multi-Error FEC Link Layer for High-Interference Environments" is a Computer Networks
+project that extends the approved project "Fast-Lane FEC for Automated Toll Booths".
 A vehicle's 96-bit RFID tag ID is sent to a roadside unit (tollgate) over a noisy link and is
 corrected *in place* with forward error correction (FEC) instead of retransmission.
 Software simulation only, no hardware.
@@ -41,24 +42,25 @@ Two noise profiles (parameters are **modelling assumptions**, see `include/profi
 ```
  vehicle --(9000)--> channel --(9001)--> tollgate
     ^                                       |
-    +------------(9002, week 2)-------------+   feedback (reserved)
+    +-----------------(9002)----------------+   ACK/NAK + window statistics (since v0.2)
 ```
 
-## FIXED INTERFACE (do not rename - the demo instructions depend on it)
+## Interface contract (fixed - the demo instructions depend on it)
 
 * Binaries in `bin/`: `bin/vehicle`, `bin/channel`, `bin/tollgate`, `bin/bench`.
 * UDP ports on 127.0.0.1: vehicle -> channel 9000, channel -> tollgate 9001,
-  tollgate -> vehicle feedback 9002 (reserved for week 2).
+  tollgate -> vehicle feedback 9002.
 * Common flags (accepted by every binary):
-  `--code {hamming74,hamming1511,secded84,bch157,bch3116,rs,ldpc}` (`ldpc` added in overnight C)
-  `--profile {toll,hospital}` `--model {bsc,ge,burst}` `--p <float>` `--seed <int>`
-  `--count <int>` `--delay-ms <int>`
+  `--code {hamming74,hamming1511,secded84,bch157,bch3116,rs,ldpc}` (`none` = uncoded baseline;
+  `ldpc` since v0.4) `--profile {toll,hospital}` `--model {bsc,ge,burst}` `--p <float>`
+  `--seed <int>` `--count <int>` `--delay-ms <int>`
 * Make targets: `make` (build all), `make test`, `make demo` (toll profile), `make demo-hospital`,
   `make compare` (same seed, hamming74 vs bch157, summaries side by side), `make bench`,
-  `make plots`, `make clean`.
-* `make demo` runs all three processes from ONE terminal (tollgate first, then channel, then vehicle,
-  output prefixed `[VEHICLE]`/`[CHANNEL]`/`[TOLLGATE]`), stops cleanly and prints a summary.
-  The same binaries also work started by hand in three terminals (see `docs/DEMO.md`).
+  `make plots`, `make sanitize`, `make clean`; demos `demo-arq`, `demo-harq`, `demo-adaptive`,
+  `dashboard`.
+* `make demo` runs all three processes from ONE terminal (tollgate first, then channel, then
+  vehicle, output prefixed `[VEHICLE]`/`[CHANNEL]`/`[TOLLGATE]`), stops cleanly and prints a
+  summary. The same binaries also work started by hand in three terminals (see `docs/DEMO.md`).
 * `requirements.txt` (matplotlib). `tools/plot.py` writes PNGs to `results/`.
 * Must build and run on Ubuntu (incl. WSL) and macOS with only gcc/clang, make, python3.
 
@@ -67,23 +69,27 @@ Two noise profiles (parameters are **modelling assumptions**, see `include/profi
 ```
 include/      public headers of the library (one per module)
 src/          library modules (bits, crc32, hamming, secded, gf, bch, rs, ldpc, interleave, rng,
-              noise, profiles, frame, codec, net, term, cli ...) -> build/libfeclink.a
+              noise, profiles, frame, fec, packet, receiver, sender, adapt, linksim, stats, ...)
+              -> build/libfeclink.a
 src/apps/     vehicle.c, channel.c, tollgate.c  -> bin/
-tools/        bench.c (-> bin/bench), plot.py, demo.sh, compare.sh
-tests/        testlib.h, test_<module>.c (unit tests), test_integration.sh
-results/      final plots (*.png tracked); CSVs and results/tmp/ are ignored
-docs/         DEMO.md and other documentation
+tools/        bench.c (-> bin/bench), plot.py, demo.sh, compare.sh, dashboard.py/.sh,
+              header_experiment.sh, check_docs.sh
+tests/        testlib.h, test_<module>.c (unit tests), test_integration.sh, test_failure.sh,
+              test_dashboard.py, inject.c (failure-injection helper)
+results/      final plots (*.png tracked); CSVs and results/tmp/ are git-ignored
+docs/         demo guide, report, algorithms, design decisions, status, roadmap, history
 bin/          build output (ignored, only .gitkeep tracked)
 ```
 
 ## Build / test commands
 
 ```
-make            # build all binaries into bin/
-make test       # unit tests + integration test (must pass before every commit)
+make                 # build all binaries into bin/
+make test            # unit tests + integration + failure-injection + dashboard tests
 make clean
 make CC=clang test   # check the other compiler too
 make sanitize        # all tests under AddressSanitizer + UBSan (build/asan), must report no findings
+sh tools/check_docs.sh   # every relative link and image path in README.md and docs/*.md exists
 ```
 
 ## Coding rules
@@ -92,9 +98,12 @@ make sanitize        # all tests under AddressSanitizer + UBSan (build/asan), mu
   every code, the CRC, the RNG and GF arithmetic are implemented here.
 * POSIX only where needed (sockets, clock_gettime, nanosleep, sigaction) - must compile on macOS.
 * **Tests before implementation** for every module (`tests/test_<module>.c`).
-* Small functions. Comment the maths clearly - students must present and explain it.
+* Small functions. Comment the maths clearly - every formula must be explainable in a presentation
+  (see `docs/ALGORITHMS.md`).
 * Bits are stored one-per-`uint8_t` (values 0/1) inside the coding layer: slow but easy to explain.
   Packing to bytes happens only at the network boundary (`bits_pack`/`bits_unpack`).
 * Everything random goes through the seeded RNG in `include/rng.h` - runs must be reproducible.
 * Never commit build outputs, binaries, logs or large CSVs. Python is only for plots/dashboard.
-* Log direction-changing choices in `DECISIONS.md` as `🔀 chose X over Y because Z`.
+* Record every direction-changing choice in `docs/DESIGN_DECISIONS.md` as a new `DD-NN` row:
+  decision, alternative considered, rationale, evidence.
+* Commit messages: `<area>: <summary>` (historic commits use `phaseN:`; see `docs/DEVELOPMENT.md`).
