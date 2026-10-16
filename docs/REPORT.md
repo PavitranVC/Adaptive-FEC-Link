@@ -64,6 +64,9 @@ the binomial model predicts the cheaper code fails below 0.05, probe back-off).
   is detected (G has degree 32 and a nonzero x^0 term, so it cannot divide a shorter burst), and for
   128-bit messages every 1-, 2- and 3-bit error is detected (`include/crc32.h`); a random
   wrong word passes with probability about 2^-32. It *detects*, it never corrects.
+  *Caveat (found later, [ALGORITHMS.md](ALGORITHMS.md) section 2):* the burst guarantee holds in the CRC's own
+  (reflected) bit order; because the payload is sent MSB-first, some specific bursts of 30 to 32 bits in transmission
+  order pass the CRC (shortest: 30 bits, weight 18). Every 1-, 2- and 3-bit error is still detected.
 * **Hamming(7,4) / (15,11)**: parity-check matrix H has the binary numbers 1..n as columns. For a
   received word r the syndrome s = H·r equals the column of the flipped position, so s read as a
   number *is* the error position (s = 0: no error). Distance 3: corrects 1 error. **SECDED(8,4)**

@@ -1,7 +1,7 @@
 # Architecture history
 
 How the architecture of *Adaptive Multi-Error FEC Link Layer for High-Interference Environments*
-changed from the first commit to the final `main`, why each change was made, and what failed.
+changed from the first commit to the current `main`, why each change was made, and what failed.
 
 **Sources.** Everything below comes from `git log` / `git show` / `git ls-tree` on `main` and the
 remote branches, from `DESIGN_DECISIONS.md`, `STATUS.md`, `ROADMAP.md`, `README.md`, `docs/REPORT.md`,
@@ -10,32 +10,46 @@ remote branches, from `DESIGN_DECISIONS.md`, `STATUS.md`, `ROADMAP.md`, `README.
 A few checks were re-run by hand for this document; they are marked **(re-run for this document)**.
 A number that could not be sourced is written "not measured".
 
-**Version boundaries (confirmed from git).** The history is one linear chain of 37 commits on
-`main`; every feature branch was fast-forwarded into it. Branch heads: `claude/bold-gauss-xza289`
-= `aa2aaac`, `week2` = `fc5dc28` (= tag `v0.2-week2`), `final-polish` = `c4d7bf4`, `overnight-a`
-= `bde2409`, `gate-a` = `754e3e9`, `overnight-b` = `ecd770f`, `gate-b` = `9933409`, `overnight-c`
-= `539acca`, `docs-fix` = `b9f8436`, `docs-timings` = `53c6109` = `main`.
+**File names.** Documents are cited by their current names. Until the v0.4 documentation
+cleanup they were called `CLAUDE.md` (now `CONTRIBUTING.md`), `DECISIONS.md` (now
+`docs/DESIGN_DECISIONS.md`, decisions renumbered DD-01..DD-29 with the old "#N" kept in a "was"
+column), `PROGRESS.md` (now `docs/STATUS.md`) and `PLAN.md` (now `docs/ROADMAP.md`); at older
+commits the files have the old names. Branches are cited by their technical names; the
+[branch and tag map](#branch-and-tag-map) lists the original working names.
 
-| version | git range (oldest..newest) | commits | dates | branches |
-|---|---|---|---|---|
-| v0.1 | `18c8a87`..`aa2aaac` | 9 | 2026-10-08 | `claude/bold-gauss-xza289` |
-| v0.2 | `04a7423`..`fc5dc28` | 6 | 2026-10-08 | `week2`, tag `v0.2-week2` |
-| v0.3 | `a6c204e`..`754e3e9` | 12 | 2026-10-08 .. 2026-10-16 | `final-polish`, `overnight-a`, `gate-a` |
-| v0.4 | `a5bc434`..`53c6109` | 10 | 2026-10-16 | `overnight-b`, `gate-b`, `overnight-c`, `docs-fix`, `docs-timings` |
+**Version boundaries (confirmed from git).** The history is one linear chain of commits on
+`main`; every branch was fast-forwarded into it. Branch heads: `release/v0.1-core-fec-pipeline`
+= `aa2aaac`, `release/v0.2-arq-adaptive-dashboard` = `fc5dc28` (= tag `v0.2-week2`),
+`release/v0.3-evaluation-goodput-rtt` = `c4d7bf4`, `feature/failure-injection-statistics` =
+`bde2409`, `chore/verify-evaluation-numbers` = `754e3e9`, `feature/ci-and-report` = `ecd770f`,
+`chore/verify-report-numbers` = `9933409`, `feature/ldpc-code` = `539acca`,
+`docs/demo-guide-fixes` = `b9f8436`, `docs/demo-timings` = `53c6109`,
+`docs/architecture-history` = `a7f5d68`, then `chore/professional-cleanup` (v0.4 documentation
+cleanup) on top.
 
-Adjustment to the brief: `gate-a` (`754e3e9`) is counted in **v0.3**, because it only corrects
-numbers of the overnight-A results; `gate-b` (`9933409`) is counted in v0.4 because it checks
-`docs/REPORT.md`, which is a v0.4 file.
+| version | git range (oldest..newest) | commits | dates | branches | tag |
+|---|---|---|---|---|---|
+| v0.1 | `18c8a87`..`aa2aaac` | 9 | 2026-10-08 | `release/v0.1-core-fec-pipeline` | `v0.1.0` |
+| v0.2 | `04a7423`..`fc5dc28` | 6 | 2026-10-08 | `release/v0.2-arq-adaptive-dashboard` | `v0.2.0` (and the older `v0.2-week2`) |
+| v0.3 | `a6c204e`..`754e3e9` | 12 | 2026-10-08 .. 2026-10-16 | `release/v0.3-evaluation-goodput-rtt`, `feature/failure-injection-statistics`, `chore/verify-evaluation-numbers` | `v0.3.0` (on `c4d7bf4`, see below) |
+| v0.4 | `a5bc434`..`53c6109` (+ documentation commits `da7d6b3`..`a7f5d68` and the cleanup) | 10 (+ 6 + cleanup) | 2026-10-16 | `feature/ci-and-report`, `chore/verify-report-numbers`, `feature/ldpc-code`, `docs/demo-guide-fixes`, `docs/demo-timings`, `docs/architecture-history`, `chore/professional-cleanup` | `v0.4.0` (main after the cleanup) |
 
-Contents: [v0.1](#v01---week-1-phases-0-6) · [v0.2](#v02---week-2-feedback-arq-harq-adaptive-dashboard) ·
-[v0.3](#v03---final-polish--overnight-a-fair-baselines-statistics-failure-injection) ·
-[v0.4](#v04---overnight-bc-and-docs-ci-report-ldpc-demo-fixes) ·
+Boundary choices: `754e3e9` (verification pass A) is counted in **v0.3**, because it only
+corrects numbers of the v0.3 hardening results; `9933409` (verification pass B) is counted in
+v0.4 because it checks `docs/REPORT.md`, which is a v0.4 file. The release tag `v0.3.0` marks the
+tip of the `release/v0.3-evaluation-goodput-rtt` branch (`c4d7bf4`, the last commit before the
+hardening work); the v0.3 hardening commits `892bd77`..`754e3e9` are contained in `v0.4.0`.
+
+Contents: [v0.1](#v01---core-fec-pipeline-phases-0-6) · [v0.2](#v02---feedback-arq-harq-adaptive-dashboard) ·
+[v0.3](#v03---evaluation-and-hardening-fair-baselines-statistics-failure-injection) ·
+[v0.4](#v04---ci-report-ldpc-demo-fixes-documentation) ·
 [A. At a glance](#a-architecture-evolution-at-a-glance) · [B. Results timeline](#b-results-timeline) ·
-[C. Lessons](#c-lessons-learned) · [D. Doc issues](#d-doc-issues) · [E. Reproduce](#e-how-to-reproduce-each-version)
+[C. Lessons](#c-lessons-learned) · [D. Doc issues](#d-doc-issues) · [E. Reproduce](#e-how-to-reproduce-each-version) ·
+[Branch and tag map](#branch-and-tag-map)
 
 ---
 
-## v0.1 - Week 1, phases 0-6
+## v0.1 - Core FEC pipeline, phases 0-6
 
 ### 1. Summary
 
@@ -104,11 +118,11 @@ ASCII fallback:
 |---|---|---|
 | library + three thin programs | benchmark and UDP pipeline must run exactly the same code | DESIGN_DECISIONS.md "Phase 0" |
 | CRC-32 on top of every code | a miscorrection must never bill the wrong car | SILENT_WRONG 0 of 1,395,000 frames in `bench.csv` and 0 of 1,395,000 in `bench_hospital.csv` |
-| ground-truth sidecar (decision #6) | live CORRECT / DETECTED_FAIL / SILENT_WRONG classification in the demo | DESIGN_DECISIONS.md "Phase 3" |
-| Gilbert-Elliott state kept across frames (#2) | real interference does not know frame boundaries | DESIGN_DECISIONS.md "Phase 2" |
+| ground-truth sidecar (DD-06, was #6) | live CORRECT / DETECTED_FAIL / SILENT_WRONG classification in the demo | DESIGN_DECISIONS.md "Phase 3" |
+| Gilbert-Elliott state kept across frames (DD-02) | real interference does not know frame boundaries | DESIGN_DECISIONS.md "Phase 2" |
 | BCH(31,16) | stronger random-error correction than Hamming | toll BSC p=0.01: 0.9986 vs Hamming(7,4) 0.9354 (`bench.csv`) |
 | Reed-Solomon (byte symbols) | bit-level codes collapse on hospital bursts | hospital GE p_gb=0.005: RS t=4 0.8336 vs BCH(31,16) 0.4936, Hamming(7,4) 0.4170 (`bench_hospital.csv`) |
-| bit interleaver (#11) | rescue Hamming/BCH against bursts | burst L=16: BCH(31,16) 0.0126 -> BCH(31,16)+il8 1.0000 (`bench.csv`) |
+| bit interleaver (DD-11) | rescue Hamming/BCH against bursts | burst L=16: BCH(31,16) 0.0126 -> BCH(31,16)+il8 1.0000 (`bench.csv`) |
 | in-process benchmark (`src/sim.c`) | sweep every code over 31 noise points x 5000 frames with exactly the pipeline's library code, same seed for every point | DESIGN_DECISIONS.md "Phase 5"; 279 rows x 5000 frames in `bench.csv` |
 
 ### 5. Wire format / interface changes
@@ -149,15 +163,15 @@ ASCII fallback:
 
 ### 8. Decisions still open / limitations
 
-- The header is never corrupted (decision #1) - tested only later (v0.3).
-- Noise parameters of both profiles are modelling assumptions (decision #5), not measurements.
+- The header is never corrupted (DD-01) - tested only later (v0.3).
+- Noise parameters of both profiles are modelling assumptions (DD-05), not measurements.
 - No feedback path: a DETECTED_FAIL frame is simply lost (no retransmission).
-- RS uses one shortened codeword per frame (decision #10); a symbol interleaver for RS was not built.
+- RS uses one shortened codeword per frame (DD-10); a symbol interleaver for RS was not built.
 - Decode latency is measured on the simulation host only.
 
 ---
 
-## v0.2 - Week 2: feedback, ARQ, HARQ, adaptive, dashboard
+## v0.2 - Feedback, ARQ, HARQ, adaptive, dashboard
 
 ### 1. Summary
 
@@ -233,15 +247,15 @@ ASCII fallback:
 
 | change | problem it solved / question it answered | evidence |
 |---|---|---|
-| `src/receiver.c` | "could the decoder cheat with the sidecar?" (decision #6) | `tests/test_receiver.c`: 2100 corrupted frames, all 7 codes, sidecar present / zeroed / garbage / stripped -> bit-identical output (DESIGN_DECISIONS.md "Phase 3") |
+| `src/receiver.c` | "could the decoder cheat with the sidecar?" (DD-06, was #6) | `tests/test_receiver.c`: 2100 corrupted frames, all 7 codes, sidecar present / zeroed / garbage / stripped -> bit-identical output (DESIGN_DECISIONS.md "Phase 3") |
 | ARQ baseline | the "retransmission" strawman the project argues against | schedule channel, seed 42: ARQ 0.8194 success, 1.7828 retx/frame, p99 94.009 ms (`bench_strategy.csv`) |
-| Hybrid ARQ (type I, #17) | FEC alone leaves failed frames lost | best plain FEC (RS t=4) 0.9136 vs HARQ RS t=4 1.0000 on the schedule channel (`bench_strategy.csv`) |
-| vehicle decides, tollgate reports (#13) | the sender owns the code; the receiver stays stateless | DESIGN_DECISIONS.md "Week 2 - task 3" |
-| step down only on a binomial prediction (#14) | corrected-bit counts are not comparable across codes | DESIGN_DECISIONS.md "Week 2 - task 3"; test `predicted_failure_matches_binomial_maths` |
-| one decision per window (#15) | first controller flapped | 14 level changes in 3000 steady toll frames -> 0 (DESIGN_DECISIONS.md); test `adaptive_does_not_oscillate_on_a_steady_channel` |
+| Hybrid ARQ (type I, DD-12) | FEC alone leaves failed frames lost | best plain FEC (RS t=4) 0.9136 vs HARQ RS t=4 1.0000 on the schedule channel (`bench_strategy.csv`) |
+| vehicle decides, tollgate reports (DD-16) | the sender owns the code; the receiver stays stateless | DESIGN_DECISIONS.md "v0.2 - adaptive FEC controller" |
+| step down only on a binomial prediction (DD-17) | corrected-bit counts are not comparable across codes | DESIGN_DECISIONS.md "v0.2 - adaptive FEC controller"; test `predicted_failure_matches_binomial_maths` |
+| one decision per window (DD-18) | first controller flapped | 14 level changes in 3000 steady toll frames -> 0 (DESIGN_DECISIONS.md); test `adaptive_does_not_oscillate_on_a_steady_channel` |
 | `--schedule` | a controller can only be shown on a channel that changes | adaptive 0.9994 success, 8 level changes, p99 33.211 ms (`bench_strategy.csv`, schedule) |
-| shared `sender.c` + `linksim.c` | benchmark must measure the same protocol as the UDP demo | DESIGN_DECISIONS.md "Week 2 - task 2" |
-| dashboard, stdlib only (#19) | nothing to install on the presentation laptop | DESIGN_DECISIONS.md "Week 2 - task 4" |
+| shared `sender.c` + `linksim.c` | benchmark must measure the same protocol as the UDP demo | DESIGN_DECISIONS.md "v0.2 - ARQ and Hybrid ARQ" |
+| dashboard, stdlib only (DD-20) | nothing to install on the presentation laptop | DESIGN_DECISIONS.md "v0.2 - live dashboard" |
 
 ### 5. Wire format / interface changes
 
@@ -258,8 +272,8 @@ ASCII fallback:
 
 | test | what it checks | result |
 |---|---|---|
-| 20 unit-test binaries, 123 test cases (`tests/test_*.c` at `fc5dc28`) | new: `test_receiver`, `test_feedback`, `test_adapt`, `test_linksim`, `test_schedule` | pass in the original session (STATUS.md at `fc5dc28`) |
-| `tests/test_integration.sh` | + ARQ, HARQ with 30% injected feedback loss, adaptive on toll->hospital->toll, JSON-lines log + dashboard HTTP server | pass in the original session |
+| 20 unit-test binaries, 123 test cases (`tests/test_*.c` at `fc5dc28`) | new: `test_receiver`, `test_feedback`, `test_adapt`, `test_linksim`, `test_schedule` | pass in the original development run (PROGRESS.md at `fc5dc28`) |
+| `tests/test_integration.sh` | + ARQ, HARQ with 30% injected feedback loss, adaptive on toll->hospital->toll, JSON-lines log + dashboard HTTP server | pass in the original development run |
 | `tests/test_dashboard.py` | dashboard state parsing | **referenced by the Makefile but not in git** (see failure 3) |
 | fresh checkout of `fc5dc28`: `make test` | **(re-run for this document)** | **fails**: exit 2, `python3: can't open file '.../tests/test_dashboard.py'` (all C tests and the integration script passed before that line) |
 
@@ -267,7 +281,7 @@ ASCII fallback:
 
 1. **The first adaptive controller flapped.** Expected: hysteresis (up 0.15 / down 0.05) keeps
    the level stable on a steady channel. Actual: it went L1 <-> L2 **14 times in 3000 steady toll
-   frames** (DESIGN_DECISIONS.md "Week 2 - task 3"). Root cause: the rule was evaluated on every feedback
+   frames** (DESIGN_DECISIONS.md "v0.2 - adaptive FEC controller"). Root cause: the rule was evaluated on every feedback
    over a *sliding* window (`5c3040a`, `include/adapt.h`: "evaluated on every feedback"), so one
    unlucky stretch gave the up-rule ~W correlated chances to fire. Fixed in `04e8807`: one decision
    per W fresh frames on disjoint windows, up threshold 0.20, probe back-off; 0 changes, guarded by
@@ -278,19 +292,19 @@ ASCII fallback:
    **(re-run for this document**, UDP pipeline, hospital, seed 42, 5000 frames: 84.1 / 78.2 / 70.4 /
    60.6%; RS t=8 alone 95.8%.) Root cause: a bit interleaver spreads one burst over *more* bytes,
    the opposite of what a byte-symbol code wants. Handled: ladder top = RS t=8 without interleaving
-   (decision #12); RS t=8 reaches 95.3% hospital / 99.96% toll (DESIGN_DECISIONS.md).
+   (DD-15, was #12); RS t=8 reaches 95.3% hospital / 99.96% toll (DESIGN_DECISIONS.md).
 3. **`make test` failed on a fresh clone.** `abcfd0b` added `tests/test_dashboard.py` to the
    Makefile, but `.gitignore` line `tests/test_*` (exceptions only for `.c` and `.sh`) hid the file,
-   so it was never committed. The original session passed because the file existed locally.
+   so it was never committed. The original development run passed because the file existed locally.
    Confirmed for this document (exit 2 at `fc5dc28`). Fixed in v0.3 by `892bd77` (file added,
    `!tests/test_*.py` exception).
-4. **Wrong test count in STATUS.md.** `fad9808` said "21 unit-test binaries"; there were 20.
+4. **Wrong test count in PROGRESS.md.** `fad9808` said "21 unit-test binaries"; there were 20.
    Fixed in `fc5dc28`.
-5. **The `v0.2-week2` tag push was reported as done, then as impossible.** `fc5dc28` STATUS.md:
-   "tagged `v0.2-week2` ... All pushes succeeded". `c4d7bf4` corrected it: "exists only locally:
-   the session proxy refused tag pushes with HTTP 403". Today `git ls-remote --tags origin` shows
+5. **The `v0.2-week2` tag push was reported as done, then as impossible.** `fc5dc28` PROGRESS.md:
+   "tagged `v0.2-week2` ... All pushes succeeded". `c4d7bf4` corrected it: "exists only locally"
+   because the build environment's proxy refused tag pushes with HTTP 403. Today `git ls-remote --tags origin` shows
    `v0.2-week2` -> `fc5dc28` on GitHub, so the tag was pushed at a later, unrecorded point and
-   STATUS.md is now outdated (see D. Doc issues).
+   PROGRESS.md was outdated (see D. Doc issues; corrected in `docs/STATUS.md`).
 6. **HARQ does not rescue weak codes on bursts.** Hospital only, seed 42 (`bench_strategy.csv`):
    HARQ + Hamming(7,4) 0.9200 success with 1.2528 retx/frame and p99 97.011 ms, HARQ + BCH(31,16)
    0.9622 / 0.9646 / 97.778 ms, while HARQ + RS t=4 reaches 1.0000 / 0.2034 / 53.609 ms. Root cause:
@@ -299,8 +313,8 @@ ASCII fallback:
 
 ### 8. Decisions still open / limitations
 
-- HARQ is type I, no soft combining (#17); no incremental redundancy.
-- RTT 20 ms, timeout 100 ms and 160 kbit/s are assumptions (#18); RTT sensitivity came only in v0.3.
+- HARQ is type I, no soft combining (DD-12); no incremental redundancy.
+- RTT 20 ms, timeout 100 ms and 160 kbit/s are assumptions (DD-13/DD-14); RTT sensitivity came only in v0.3.
 - BER^ ignores failed frames, so it under-estimates on bursty channels (STATUS.md "Known issues").
 - Adaptive flags (`--window`, thresholds) must be given to vehicle **and** tollgate.
 - The tollgate's duplicate filter keeps `seq mod 65536`.
@@ -308,7 +322,7 @@ ASCII fallback:
 
 ---
 
-## v0.3 - Final polish + overnight A: fair baselines, statistics, failure injection
+## v0.3 - Evaluation and hardening: fair baselines, statistics, failure injection
 
 ### 1. Summary
 
@@ -317,8 +331,8 @@ No new process; the architecture was *hardened and measured*. A goodput metric a
 claim did not hold. The channel gained header-corruption injection, the build gained ASan/UBSan and
 a fuzz test, the benchmark gained 20-seed statistics with confidence intervals, and the controller
 gained a second, pre-registered ladder (`--ladder rs`). Git range `a6c204e`..`754e3e9`
-(polish `a6c204e`, `e00eef7`, `c4d7bf4`; overnight A `892bd77`, `550ca0d`, `dd89f72`, `af91465`,
-`955da8c`, `ac2adbb`, `b409980`, `bde2409`; gate A `754e3e9`).
+(evaluation `a6c204e`, `e00eef7`, `c4d7bf4`; hardening `892bd77`, `550ca0d`, `dd89f72`, `af91465`,
+`955da8c`, `ac2adbb`, `b409980`, `bde2409`; verification pass A `754e3e9`).
 
 ### 2. Architecture diagram
 
@@ -370,18 +384,18 @@ ASCII fallback:
 | RS decoder | output the received bytes on failure (was uninitialized) | `src/rs.c`, `tests/test_rs.c` | `dd89f72` |
 | statistics | `--seeds N`, mean +- 95% CI (Student t), paired differences | `src/stats.c`, `tests/test_stats.c`, `tools/bench.c` | `af91465` |
 | controller | pre-registration, then `--ladder {mixed,rs}`, then the result | `DESIGN_DECISIONS.md`; `src/adapt.c`; `tools/bench.c` | `955da8c`, `ac2adbb`, `b409980` |
-| docs | PROGRESS, gate A number corrections | `STATUS.md`, `DESIGN_DECISIONS.md` | `bde2409`, `754e3e9` |
+| docs | PROGRESS, verification pass A number corrections | `STATUS.md`, `DESIGN_DECISIONS.md` | `bde2409`, `754e3e9` |
 
 ### 4. Why
 
 | change | problem it solved / question it answered | evidence |
 |---|---|---|
-| goodput + HARQ RS t=4/t=8 baselines | "is adaptive better than always using the strongest code?" was never measured | single seed: adaptive 0.505, HARQ RS t=8 0.490, HARQ RS t=4 0.612 (DESIGN_DECISIONS.md "Final polish"; `bench_strategy.csv` regenerated: 0.5047 / 0.4903 / 0.6121) |
-| RTT sensitivity | RTT 20 ms is an assumption (#18) | p99 ARQ 26.509 -> 94.009 -> 229.009 ms, adaptive 10.712 -> 33.212 -> 78.212 ms; rankings unchanged (REPORT 7.3, `bench_rtt_*.csv`) |
-| failure injection | the header is never corrupted (#1) - what if it is? | FEC, P=0.01: 23 of 24 corrupted headers cost a frame; HARQ, P=0.2: tollgate claims 2003 CORRECT of 2000 sent (DESIGN_DECISIONS.md #1) |
-| sanitizers + fuzzing | C code with hand-made parsers and decoders | 1 real bug (RS), 0 parser bugs in 450k inputs (DESIGN_DECISIONS.md "task 2") |
-| 20 seeds + paired CIs (#22) | single-seed differences of a few frames are noise | HARQ RS t=4 p99 is 32.4 ms in 11 seeds and >= 40 ms (53.6 ms) in 9 (`bench_strategy_seeds_raw.csv`, counted for this document) |
-| all-RS ladder (#23) | was the *ladder*, not the controller, the reason adaptive lost? | goodput 0.584 +- 0.004 vs 0.504 mixed, paired +0.0799 +- 0.0050 (`bench_ladder_rs_seeds*.csv`) |
+| goodput + HARQ RS t=4/t=8 baselines | "is adaptive better than always using the strongest code?" was never measured | single seed: adaptive 0.505, HARQ RS t=8 0.490, HARQ RS t=4 0.612 (DESIGN_DECISIONS.md "v0.3 - fair comparison and goodput"lish"; `bench_strategy.csv` regenerated: 0.5047 / 0.4903 / 0.6121) |
+| RTT sensitivity | RTT 20 ms is an assumption (DD-13/DD-14) | p99 ARQ 26.509 -> 94.009 -> 229.009 ms, adaptive 10.712 -> 33.212 -> 78.212 ms; rankings unchanged (REPORT 7.3, `bench_rtt_*.csv`) |
+| failure injection | the header is never corrupted (DD-01) - what if it is? | FEC, P=0.01: 23 of 24 corrupted headers cost a frame; HARQ, P=0.2: tollgate claims 2003 CORRECT of 2000 sent (DESIGN_DECISIONS.md DD-01) |
+| sanitizers + fuzzing | C code with hand-made parsers and decoders | 1 real bug (RS), 0 parser bugs in 450k inputs (DESIGN_DECISIONS.md "v0.3 - sanitizers and fuzzing") |
+| 20 seeds + paired CIs (DD-23) | single-seed differences of a few frames are noise | HARQ RS t=4 p99 is 32.4 ms in 11 seeds and >= 40 ms (53.6 ms) in 9 (`bench_strategy_seeds_raw.csv`, counted for this document) |
+| all-RS ladder (DD-24) | was the *ladder*, not the controller, the reason adaptive lost? | goodput 0.584 +- 0.004 vs 0.504 mixed, paired +0.0799 +- 0.0050 (`bench_ladder_rs_seeds*.csv`) |
 
 ### 5. Wire format / interface changes
 
@@ -421,7 +435,7 @@ ASCII fallback:
    frame) and a lower p99 (33.2 ms vs 42 +- 5 ms). Root cause: seed 42 was lucky for RS t=4
    (p99 32.4 ms; 9 of 20 seeds give 53.6 ms), and retransmissions were already lower for adaptive
    in the single-seed run (0.076 vs 0.089). Handled: README table switched to 20-seed means.
-3. **Failure injection found 3 real bugs** (`550ca0d`, DESIGN_DECISIONS.md "Overnight A - task 1"):
+3. **Failure injection found 3 real bugs** (`550ca0d`, DESIGN_DECISIONS.md "v0.3 - failure injection"):
    (a) a 0-byte datagram was read as "idle timeout" and **stopped** the tollgate/channel;
    (b) an invalid packet **stole the seq** of a later valid one, which was then dropped as a
    duplicate and counted as DETECTED_FAIL; (c) `SO_REUSEADDR` let a **second process bind the same
@@ -436,11 +450,11 @@ ASCII fallback:
    corrupted headers cost a frame (4.8% of all frames). Root cause: no header checksum; a flipped
    seq bit files a frame under another seq. **Left open**: the fix (header CRC-16) changes the
    wire format.
-6. **Two DESIGN_DECISIONS.md numbers were wrong** and were corrected by gate A (`754e3e9`): HARQ frames
+6. **Two DESIGN_DECISIONS.md numbers were wrong** and were corrected by verification pass A (`754e3e9`): HARQ frames
    "lost or misrouted" at P = 0.01 / 0.05 were written as 0.15% / 0.6% but are **0.1% / 0.5%**
    (the old numbers included the "failed" column); the p99 difference vs HARQ RS t=8 was written as
    "+0.002 ms" and became "+0.001-0.002 ms (real decode-time jitter, differs per run)".
-   No README number was changed by gate A.
+   No README number was changed by verification pass A.
 7. **The all-RS ladder held its pre-registered hypothesis but still lost to a fixed code.**
    Criterion met (goodput 0.584 +- 0.004 vs 0.504 mixed and 0.491 RS t=8; success 99.999%), but
    vs fixed HARQ + RS t=4 the paired goodput difference is **-0.0284 +- 0.0038** on the schedule
@@ -451,29 +465,30 @@ ASCII fallback:
    (`bench_strategy_seeds_diff.csv`): hospital only, goodput **-0.0033 +- 0.0007**; toll only, p99
    **+21.2 ms**. Its +0.0133 goodput advantage exists only on the switching schedule channel.
 9. **Dashboard labels are wrong with `--ladder rs`** (level numbers right, axis names from the
-   mixed ladder). Left open (DESIGN_DECISIONS.md "task 4").
+   mixed ladder). Left open (DESIGN_DECISIONS.md "v0.3 - all-RS ladder experiment").
 
 ### 8. Decisions still open / limitations
 
 - Header protection (CRC-16, new header version) - open problem in STATUS.md.
 - Default ladder for the demo: `mixed` (all docs use it) vs `rs` - team decision listed in STATUS.md.
-- p99 of HARQ codes is bimodal across seeds, so its t-interval is approximate (#22 caveat).
+- p99 of HARQ codes is bimodal across seeds, so its t-interval is approximate (DD-23 caveat).
 - `make sanitize CC=clang` not run; macOS / WSL not run in this version.
 - No controller can choose "fixed RS t=4" when that is best (REPORT section 10, future work).
 
 ---
 
-## v0.4 - Overnight B/C and docs: CI, report, LDPC, demo fixes
+## v0.4 - CI, report, LDPC, demo fixes, documentation
 
 ### 1. Summary
 
 The runtime architecture stayed the same; around it the project gained continuous integration
 (ubuntu + macOS + sanitizers on GitHub Actions), a sourced report (`docs/REPORT.md`) with a
-number-checking gate, and an optional eighth code, LDPC(256,128) with a Gallager bit-flipping
+number-checking verification pass, and an optional eighth code, LDPC(256,128) with a Gallager bit-flipping
 decoder, benchmarked in a separate sweep so no earlier result changed. A real WSL run of the demo
-guide then fixed the demo targets and timings. Git range `a5bc434`..`53c6109` (overnight B `a5bc434`,
-`5b4c301`, `ecd770f`; gate B `9933409`; overnight C `439c5bc`, `e10f13f`, `539acca`; docs-fix
-`de1059b`, `b9f8436`; docs-timings `53c6109`).
+guide then fixed the demo targets and timings. Git range `a5bc434`..`53c6109` (CI and report `a5bc434`,
+`5b4c301`, `ecd770f`; verification pass B `9933409`; LDPC `439c5bc`, `e10f13f`, `539acca`; demo-guide
+fixes `de1059b`, `b9f8436`; demo timings `53c6109`), followed by the documentation commits
+`da7d6b3`..`a7f5d68` (this history) and the documentation cleanup (`chore/professional-cleanup`).
 
 ### 2. Architecture diagram
 
@@ -510,7 +525,7 @@ ASCII fallback:
  bin/bench --compare-codes bch157,bch3116,rs,rs_t8,ldpc (new) --> bench_ldpc.csv, bench_ldpc_hospital.csv
  tools/demo.sh: SHOWBITS env (new); make demo-harq now on the hospital profile (changed)
  .github/workflows/ci.yml (new): ubuntu-latest + macos-latest make test, ubuntu make sanitize
- docs/REPORT.md (new) <-- numbers checked against results/*.csv by gate B
+ docs/REPORT.md (new) <-- numbers checked against results/*.csv by verification pass B
 ```
 
 The ladder, the controller and every strategy are unchanged: LDPC is not on any ladder.
@@ -521,25 +536,29 @@ The ladder, the controller and every strategy are unchanged: LDPC is not on any 
 |---|---|---|---|
 | CI | GitHub Actions: build + `make test` on ubuntu-latest and macos-latest, `make sanitize` on ubuntu | `.github/workflows/ci.yml` | `a5bc434` |
 | docs | report draft with numbers from the CSVs; first CI run recorded | `docs/REPORT.md`, `STATUS.md`, `ROADMAP.md` | `5b4c301`, `ecd770f` |
-| docs | gate B: REPORT.md numbers checked; "tie within the noise" replaced by a paired difference | `docs/REPORT.md`, `STATUS.md` | `9933409` |
+| docs | verification pass B: REPORT.md numbers checked; "tie within the noise" replaced by a paired difference | `docs/REPORT.md`, `STATUS.md` | `9933409` |
 | codes | LDPC(256,128) + bit-flipping decoder, tests first | `src/ldpc.c`, `include/ldpc.h`, `tests/test_ldpc.c` | `439c5bc` |
 | codes / bench | `--code ldpc` in the FEC registry; `bench --compare-codes`; LDPC plots | `src/fec.c`, `include/fec.h`, `tools/bench.c`, `tools/plot.py`, `Makefile` | `e10f13f` |
 | docs | honest LDPC result in all docs | `DESIGN_DECISIONS.md`, `STATUS.md`, `ROADMAP.md`, `README.md`, `docs/REPORT.md` | `539acca` |
 | demo | `SHOWBITS` switch; `demo-harq` uses the hospital profile; integration check | `Makefile`, `tools/demo.sh`, `tests/test_integration.sh` | `de1059b` |
 | docs | DEMO.md after a real WSL run (setup, test output, talking script, bench/plots, dashboard) | `docs/DEMO.md`, `tools/plot.py`, `STATUS.md` | `b9f8436` |
 | docs | DEMO.md timings from the measured WSL run | `docs/DEMO.md` | `53c6109` |
+| docs | this architecture history (one section per version, results timeline, lessons, doc issues) | `docs/ARCHITECTURE_HISTORY.md`, links in `README.md`, `docs/DEMO.md` | `da7d6b3`..`a7f5d68` |
+| docs | documentation cleanup: `CONTRIBUTING.md` replaces the assistant-instructions file, `docs/ALGORITHMS.md` and `docs/DEVELOPMENT.md` added, decisions as DD records, `PROGRESS/PLAN/DECISIONS.md` moved to `docs/STATUS.md`, `docs/ROADMAP.md`, `docs/DESIGN_DECISIONS.md`, README restructured, `tools/check_docs.sh`, technical branch names and version tags (no code logic changed: stripped objects byte-identical) | see the file list in the commit messages `cleanup-1`..`cleanup-6` | `chore/professional-cleanup` |
 
 ### 4. Why
 
 | change | problem it solved / question it answered | evidence |
 |---|---|---|
 | CI on ubuntu + macOS | nobody had run the code on macOS; the fixed interface requires it | first run 38829733020 on `a5bc434`: 3 jobs green (STATUS.md); all 15 CI runs up to `53c6109` concluded "success" (GitHub Actions API, checked for this document) |
-| REPORT.md + gate B | the teacher needs one sourced report | gate B: "no mismatches; all 8 figure paths exist" (STATUS.md "Gate B") |
+| REPORT.md + verification pass B | the teacher needs one sourced report | verification pass B: "no mismatches; all 8 figure paths exist" (STATUS.md "Verification pass B") |
 | LDPC (optional stretch) | "would a modern code beat RS on our channels?" | hospital GE: LDPC 0.7902 vs RS t=8 0.9532 (`bench_ldpc_hospital.csv`) |
-| separate `--compare-codes` sweep (#26) | existing results must not change | `bench.csv` / `bench_hospital.csv` identical to main's except timing (DESIGN_DECISIONS.md "Overnight C") |
-| RS t=8 in the LDPC comparison | RS t=4 (rate 0.667) is not a same-rate rival for LDPC (0.500) | DESIGN_DECISIONS.md "Overnight C" |
+| separate `--compare-codes` sweep (DD-29) | existing results must not change | `bench.csv` / `bench_hospital.csv` identical to main's except timing (DESIGN_DECISIONS.md "v0.4 - LDPC") |
+| RS t=8 in the LDPC comparison | RS t=4 (rate 0.667) is not a same-rate rival for LDPC (0.500) | DESIGN_DECISIONS.md "v0.4 - LDPC" |
 | `demo-harq` on hospital | on the toll profile the 20-frame demo showed no retransmission at all | **(re-run for this document)** toll, seed 42, 20 frames: 0 retransmissions; hospital: 42 retransmissions, 4 frames given up |
 | timings in DEMO.md | presenters need realistic durations | `53c6109`: demo-adaptive ~15 -> ~14 s, dashboard ~36 -> ~33 s, `make bench` ~2 -> ~1 min |
+| architecture history | a reviewer needs to see why the design changed and what failed, per version | this document |
+| documentation cleanup | the repository is presented as an engineering project: neutral names, every formula with a reproducible example, one place per kind of information | `docs/ALGORITHMS.md` (13 topics, every example produced by running the library); `tools/check_docs.sh` (all relative links resolve) |
 
 ### 5. Wire format / interface changes
 
@@ -551,6 +570,8 @@ The ladder, the controller and every strategy are unchanged: LDPC is not on any 
 | make | - | `SHOWBITS` variable (default 1 for `demo`/`demo-hospital`, 0 for `demo-arq`/`demo-harq`); `demo-harq` now `--profile hospital`; no new target |
 | bench outputs | - | `results/bench_ldpc.csv`, `results/bench_ldpc_hospital.csv`; PNGs 16 -> 26 |
 | CI | none | `.github/workflows/ci.yml` |
+| documents | `CLAUDE.md`, `DECISIONS.md`, `PROGRESS.md`, `PLAN.md` at the root | `CONTRIBUTING.md`; `docs/DESIGN_DECISIONS.md`, `docs/STATUS.md`, `docs/ROADMAP.md`; new `docs/ALGORITHMS.md`, `docs/DEVELOPMENT.md`, `tools/check_docs.sh` |
+| branches / tags | working names, tag `v0.2-week2` | `release/...`, `feature/...`, `docs/...`, `chore/...`; tags `v0.1.0`..`v0.4.0` (see the map) |
 
 ### 6. Test and verification
 
@@ -574,7 +595,7 @@ The ladder, the controller and every strategy are unchanged: LDPC is not on any 
    code; a frame it cannot fix runs all 50 iterations (up to ~50 us). Handled: reported, LDPC kept
    off the ladder; soft decoding left as future work.
 2. **The first LDPC comparison used an unfair baseline.** RS t=8 (same rate 0.500) was added
-   *after* the first LDPC run, because RS t=4 has rate 0.667 (DESIGN_DECISIONS.md "Overnight C"). Only the
+   *after* the first LDPC run, because RS t=4 has rate 0.667 (DESIGN_DECISIONS.md "v0.4 - LDPC"). Only the
    baseline set changed, not the LDPC code; stated openly in DESIGN_DECISIONS.md.
 3. **The live ARQ/HARQ demos did not match the benchmark numbers in the talking script.**
    Expected: `make demo-arq` / `make demo-harq` illustrate the 5000-frame numbers. Actual
@@ -589,8 +610,16 @@ The ladder, the controller and every strategy are unchanged: LDPC is not on any 
    **108 s** in this container (re-run for this document), so "~1 min" is host-dependent, and
    STATUS.md still says ~1:50 (see D).
 5. **The LDPC construction could not reach girth 8.** The greedy PEG avoids 4-cycles but the
-   default code has **girth 6** (DESIGN_DECISIONS.md "Overnight C"); every 1- and 2-bit error is still
+   default code has **girth 6** (DESIGN_DECISIONS.md "v0.4 - LDPC"); every 1- and 2-bit error is still
    corrected. Left as is.
+6. **The CRC burst guarantee does not hold exactly in transmission order** (found during the
+   documentation cleanup, while producing the worked example of `docs/ALGORITHMS.md` section 2).
+   Expected (REPORT.md section 4): every burst of up to 32 bits is detected. Actual: the CRC is
+   computed reflected (LSB-first per byte) but the payload is sent MSB-first, so only 54 of the 97
+   32-bit windows of the payload have full rank; the shortest undetected burst is 30 bits long
+   (weight 18). Every 1-, 2- and 3-bit error is still detected and SILENT_WRONG stayed 0 in every
+   run. Left open (a fix changes the wire format); caveat added to REPORT.md, listed in
+   `docs/DEVELOPMENT.md` "Open problems".
 
 ### 8. Decisions still open / limitations
 
@@ -637,7 +666,7 @@ Counts computed with `git ls-tree` / `git show` at the last commit of each versi
 | v0.3 | paired difference adaptive - HARQ RS t=4, 20 seeds | goodput -0.1083 +- 0.0030; retx -0.0194 +- 0.0025; p99 -8.74 +- 5.06 ms | `bench_strategy_seeds_diff.csv` |
 | v0.3 | all-RS ladder, 20 seeds | goodput 0.5841 +- 0.0040, success 0.99999; paired vs HARQ RS t=4: -0.0284 +- 0.0038 | `bench_ladder_rs_seeds*.csv` |
 | v0.3 | RTT sensitivity, p99 at 5 / 20 / 50 ms | ARQ 26.509 / 94.009 / 229.009 ms; adaptive 10.712 / 33.212 / 78.212 ms | `bench_rtt_*.csv` (as in REPORT 7.3; the regenerated CSV differs by 0.001 ms, timing noise) |
-| v0.3 | header corruption, HARQ, P=0.2 | tollgate claims 2003 CORRECT of 2000 sent | `header_corruption.csv` (via DESIGN_DECISIONS.md #1; not regenerated for this document) |
+| v0.3 | header corruption, HARQ, P=0.2 | tollgate claims 2003 CORRECT of 2000 sent | `header_corruption.csv` (via DESIGN_DECISIONS.md DD-01; not regenerated for this document) |
 | v0.4 | LDPC(256,128) vs RS t=8 (same rate) | BSC p=0.02: 0.9874 vs 0.9608; hospital GE: 0.7902 vs 0.9532; burst L=24: 0.6916 vs 1.0000 | `bench_ldpc.csv`, `bench_ldpc_hospital.csv` |
 
 ## C. Lessons learned
@@ -662,36 +691,72 @@ Counts computed with `git ls-tree` / `git show` at the last commit of each versi
 
 ## D. Doc issues
 
-Disagreements found while writing this document. None was fixed here (documentation-only task
-limited to this file and two links); git and the CSVs are taken as correct.
+Disagreements found while writing this document. None was fixed when this history was first
+written (documentation-only task limited to this file and two links); git and the CSVs are taken
+as correct. The last column records what the v0.4 documentation cleanup did (wording only; no
+number was changed).
 
-| # | where | says | git / CSV / re-run says |
-|---|---|---|---|
-| 1 | `STATUS.md` line 4 | tag `v0.2-week2` "exists only locally" (HTTP 403) | `git ls-remote --tags origin`: `v0.2-week2` -> `fc5dc28` exists on GitHub |
-| 2 | `STATUS.md` (CI section), `ROADMAP.md` (overnight B task 5) | later CI runs "still queued"; workflow "not yet run" | all 15 CI runs, up to `53c6109` on `main`, concluded "success" |
-| 3 | `make bench` duration | DEMO.md "~1 min"; STATUS.md "~1:50"; REPORT.md "about 100 s" | 108 s in this container; host-dependent |
-| 4 | `STATUS.md` docs-fix section | dashboard "120 ms/frame (~36 s + 3 s)" | `docs/DEMO.md` after `53c6109`: "~33 s of demo after a 3 s start" |
-| 5 | `docs/DEMO.md` talking script rows 6 and 8 | single-seed numbers: HARQ RS "32 ms", adaptive "99.94%", goodput "0.505 against 0.490" | README uses the 20-seed means: p99 42 +- 5 ms for HARQ RS t=4 (32 ms was seed luck, 11 of 20 seeds), adaptive 99.95%, goodput 0.504 vs 0.491 |
-| 6 | `README.md` intro "Codes:", `docs/DEMO.md` section 1 and flag table | code list without `ldpc` | `src/fec.c`, `bin/bench --help`, CONTRIBUTING.md list 8 codes incl. `ldpc` |
-| 7 | `README.md` | "Decode latency is 2-8 microseconds per frame for every code" | REPORT.md 7.1: BCH(31,16) 9.135 us; regenerated `bench.csv`: up to 10.496 us (BCH(31,16)+il8); LDPC up to ~50 us |
-| 8 | `docs/DEMO.md` section 2, `CONTRIBUTING.md` | port 9002 "reserved for week-2 feedback" | used since `5c3040a` (ACK/NAK + window stats) |
-| 9 | `include/packet.h` comment | "version (1)" | `#define PACKET_VERSION 2` since `5c3040a` (code comment; not changed here) |
-| 10 | `DESIGN_DECISIONS.md` decision #12 | RS t=4 hospital 83.4% -> 77.4 / 69.5 / 59.8% with d = 2 / 4 / 8 | no CSV holds RS + interleaver; UDP re-run (seed 42): 84.1 / 78.2 / 70.4 / 60.6% - same trend, not bit-identical |
-| 11 | commit `5c3040a` message | "Stop-and-Wait ARQ and Hybrid ARQ ..." | the commit also added `src/adapt.c` and `src/window.c` (the first, flapping controller) |
-| 12 | `STATUS.md` "Decisions to review" | decision 20 listed before 19 | ordering only |
+| # | where | says | git / CSV / re-run says | status after the cleanup |
+|---|---|---|---|---|
+| 1 | `PROGRESS.md` line 4 (now `docs/STATUS.md`) | tag `v0.2-week2` "exists only locally" (HTTP 403) | `git ls-remote --tags origin`: `v0.2-week2` -> `fc5dc28` exists on GitHub | resolved: STATUS.md says the tag exists on GitHub |
+| 2 | `STATUS.md` (CI section), `ROADMAP.md` (v0.4 task 5) | later CI runs "still queued"; workflow "not yet run" | all 15 CI runs, up to `53c6109` on `main`, concluded "success" | resolved: both now say all runs green |
+| 3 | `make bench` duration | DEMO.md "~1 min"; STATUS.md "~1:50"; REPORT.md "about 100 s" | 108 s in this container; host-dependent | resolved in STATUS.md ("1-2 minutes, host-dependent", all three measurements listed); DEMO.md and REPORT.md unchanged |
+| 4 | `STATUS.md` demo-guide-fixes section | dashboard "120 ms/frame (~36 s + 3 s)" | `docs/DEMO.md` after `53c6109`: "~33 s of demo after a 3 s start" | resolved: STATUS.md gives both, the measured value last |
+| 5 | `docs/DEMO.md` talking script rows 6 and 8 | single-seed numbers: HARQ RS "32 ms", adaptive "99.94%", goodput "0.505 against 0.490" | README uses the 20-seed means: p99 42 +- 5 ms for HARQ RS t=4 (32 ms was seed luck, 11 of 20 seeds), adaptive 99.95%, goodput 0.504 vs 0.491 | **open** (numbers in the talking script were not changed by the cleanup; the presenters should decide) |
+| 6 | `README.md` intro "Codes:", `docs/DEMO.md` section 1 and flag table | code list without `ldpc` | `src/fec.c`, `bin/bench --help`, CONTRIBUTING.md list 8 codes incl. `ldpc` | resolved: README and DEMO.md list `ldpc` |
+| 7 | `README.md` | "Decode latency is 2-8 microseconds per frame for every code" | REPORT.md 7.1: BCH(31,16) 9.135 us; regenerated `bench.csv`: up to 10.496 us (BCH(31,16)+il8); LDPC up to ~50 us | resolved: the sentence is no longer in README (REPORT.md 7.1 has the measured values) |
+| 8 | `docs/DEMO.md` section 2, `CONTRIBUTING.md` | port 9002 "reserved for week-2 feedback" (old wording) | used since `5c3040a` (ACK/NAK + window stats) | resolved: both describe 9002 as the ACK/NAK feedback port |
+| 9 | `include/packet.h` comment | "version (1)" | `#define PACKET_VERSION 2` since `5c3040a` | resolved: comment now "PACKET_VERSION = 2; 1 in v0.1" |
+| 10 | `DESIGN_DECISIONS.md` DD-15 (was #12) | RS t=4 hospital 83.4% -> 77.4 / 69.5 / 59.8% with d = 2 / 4 / 8 | no CSV holds RS + interleaver; UDP re-run (seed 42): 84.1 / 78.2 / 70.4 / 60.6% - same trend, not bit-identical | open (kept as documented; numbers unchanged) |
+| 11 | commit `5c3040a` message | "Stop-and-Wait ARQ and Hybrid ARQ ..." | the commit also added `src/adapt.c` and `src/window.c` (the first, flapping controller) | open (history is not rewritten) |
+| 12 | `STATUS.md` "Decisions to review" | decision 20 listed before 19 | ordering only | resolved: the list is now ordered by DD record |
+| 13 | `docs/REPORT.md` section 4 (CRC-32) | "every burst of up to 32 bits is detected" | holds in the CRC's own bit order; in this repo's transmission order (reflected CRC, MSB-first packing) a 30-bit burst of weight 18 passes the CRC (found for `docs/ALGORITHMS.md` section 2) | open: caveat added to REPORT.md and ALGORITHMS.md; fix listed in DEVELOPMENT.md "Open problems" |
 
 ## E. How to reproduce each version
 
 ```sh
 git clone https://github.com/PavitranVC/Adaptive-FEC-Link.git && cd Adaptive-FEC-Link
-git checkout <commit>      # detached HEAD
+git checkout <tag or commit>   # detached HEAD
 make && make test
-make bench                 # optional: regenerates results/*.csv (git-ignored)
+make bench                     # optional: regenerates results/*.csv (git-ignored)
 ```
 
-| version | commit | `make` + `make test` | verified for this document |
+| version | commit / tag | `make` + `make test` | verified for this document |
 |---|---|---|---|
-| v0.1 | `aa2aaac` | passes | **yes**: `make` exit 0, `make test` exit 0, "Integration test passed." (plot test skipped, no matplotlib) |
-| v0.2 | `fc5dc28` (tag `v0.2-week2`) | **fails on a fresh clone**: `tests/test_dashboard.py` missing (v0.2 failure 3); all C tests and the integration script pass before that line | **yes**: exit 2, as described |
-| v0.3 | `754e3e9` | expected to pass (STATUS.md: all green, gcc 13 + clang) | no |
-| v0.4 | `53c6109` (`main`) | passes; also green in CI (ubuntu, macOS, sanitize) | **yes** (this branch = `53c6109` + docs): "All unit tests passed.", "Integration test passed.", "Failure-injection test passed.", "dashboard tests passed", exit 0 |
+| v0.1 | `aa2aaac` (tag `v0.1.0`) | passes | **yes**: `make` exit 0, `make test` exit 0, "Integration test passed." (plot test skipped, no matplotlib) |
+| v0.2 | `fc5dc28` (tags `v0.2.0`, `v0.2-week2`) | **fails on a fresh clone**: `tests/test_dashboard.py` missing (v0.2 failure 3); all C tests and the integration script pass before that line | **yes**: exit 2, as described |
+| v0.3 | `754e3e9` (end of the v0.3 range); tag `v0.3.0` = `c4d7bf4` (release branch tip) | expected to pass (STATUS.md: all green, gcc 13 + clang) | no |
+| v0.4 | `main` (tag `v0.4.0`) | passes; also green in CI (ubuntu, macOS, sanitize) | **yes** for `53c6109` + docs: "All unit tests passed.", "Integration test passed.", "Failure-injection test passed.", "dashboard tests passed", exit 0; the cleanup commits re-ran `make test` and `make sanitize` (see `docs/DEVELOPMENT.md`) |
+
+## Branch and tag map
+
+Branches were renamed from their working names to technical names (convention in
+[DEVELOPMENT.md](DEVELOPMENT.md#branch-naming)). Every new branch points at exactly the same
+commit as the old one; the commit range is the commits that branch added on top of the previous
+one in the linear history.
+
+| old name | new name | what it contains | commit range |
+|---|---|---|---|
+| `claude/bold-gauss-xza289` | `release/v0.1-core-fec-pipeline` | v0.1: phases 0-6 (codes, noise, UDP pipeline, bench, RS, interleaver) | `18c8a87`..`aa2aaac` |
+| `week2` | `release/v0.2-arq-adaptive-dashboard` | v0.2: receiver module, ARQ / HARQ, adaptive controller, dashboard | `04a7423`..`fc5dc28` |
+| `final-polish` | `release/v0.3-evaluation-goodput-rtt` | v0.3 evaluation: single demo guide, goodput + HARQ RS baselines, RTT sensitivity | `a6c204e`..`c4d7bf4` |
+| `overnight-a` | `feature/failure-injection-statistics` | v0.3 hardening: failure injection, sanitizers + fuzzing, 20-seed statistics, all-RS ladder | `892bd77`..`bde2409` |
+| `gate-a` | `chore/verify-evaluation-numbers` | v0.3 verification pass A (design-decision numbers) | `754e3e9` |
+| `overnight-b` | `feature/ci-and-report` | v0.4: GitHub Actions CI, report draft | `a5bc434`..`ecd770f` |
+| `gate-b` | `chore/verify-report-numbers` | v0.4 verification pass B (report numbers) | `9933409` |
+| `overnight-c` | `feature/ldpc-code` | v0.4: LDPC(256,128) + bit flipping, `--compare-codes` | `439c5bc`..`539acca` |
+| `docs-fix` | `docs/demo-guide-fixes` | v0.4: demo guide after a real WSL run, `SHOWBITS` | `de1059b`..`b9f8436` |
+| `docs-timings` | `docs/demo-timings` | v0.4: measured demo timings | `53c6109` |
+| `docs-architecture` | `docs/architecture-history` | v0.4: this document | `da7d6b3`..`a7f5d68` |
+| - | `chore/professional-cleanup` (new) | v0.4: documentation cleanup (CONTRIBUTING, ALGORITHMS, DEVELOPMENT, DD records, renames) | `93e4448`.. (tip = tag `v0.4.0`) |
+
+| tag | commit | meaning |
+|---|---|---|
+| `v0.1.0` | `aa2aaac` | last commit of v0.1 |
+| `v0.2.0` | `fc5dc28` | last commit of v0.2 |
+| `v0.2-week2` | `fc5dc28` | older tag of the same commit, kept (can be deleted by the repository owner) |
+| `v0.3.0` | `c4d7bf4` | tip of the v0.3 release branch, before the hardening commits |
+| `v0.4.0` | `main` after the documentation cleanup | current release |
+
+Rename status: see [STATUS.md](STATUS.md#branches-and-tags) for which renames and tag pushes were
+completed on GitHub.

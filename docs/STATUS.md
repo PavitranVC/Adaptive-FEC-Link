@@ -201,6 +201,14 @@ All direction-changing choices are design records in [DESIGN_DECISIONS.md](DESIG
 | DD-28 | #25 | Decoder = parallel Gallager bit flipping, hard decision, max 50 iterations (not tuned). |
 | DD-29 | #26 | LDPC is benchmarked in a separate `--compare-codes` sweep (default sweep unchanged); RS t=8 added to that comparison as the same-rate baseline. |
 
+## Branches and tags
+
+Working branch names are being replaced by technical names (`release/vX.Y-<topic>`,
+`feature/<topic>`, `docs/<topic>`, `chore/<topic>`) and versions get annotated tags
+`v0.1.0`..`v0.4.0`; the full old -> new map with commit ranges is in
+[ARCHITECTURE_HISTORY.md](ARCHITECTURE_HISTORY.md#branch-and-tag-map). Status: planned (updated
+when the renames are done).
+
 ## Demo guide fixes (v0.4)
 
 Changes after a real WSL run of docs/DEMO.md: WSL note and the real last line of `make test`; talking
