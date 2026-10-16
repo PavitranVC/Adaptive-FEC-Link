@@ -130,9 +130,9 @@ int ldpc_build(ldpc_code_t *c, uint64_t seed) {
 
 const ldpc_code_t *ldpc_default(void) {
     static ldpc_code_t code;
-    static int ready = 0;
-    if (!ready) { ldpc_build(&code, LDPC_SEED); ready = 1; }
-    return &code;
+    static int state = 0;           /* 0 = not built yet, 1 = ok, -1 = construction failed */
+    if (!state) state = ldpc_build(&code, LDPC_SEED) == 0 ? 1 : -1;
+    return state > 0 ? &code : NULL;
 }
 
 /* ------------------------------------------------------------------------------------------

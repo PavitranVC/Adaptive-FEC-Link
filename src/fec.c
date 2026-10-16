@@ -5,6 +5,7 @@
 #include "fec.h"
 #include "hamming.h"
 #include "interleave.h"
+#include "ldpc.h"
 #include "rs.h"
 #include "secded.h"
 
@@ -54,6 +55,10 @@ static int rs_dec(const fec_config_t *f, uint8_t *c, uint8_t *d) {
     return ret;
 }
 
+/* LDPC(256,128): like RS, the whole 128-bit payload is ONE codeword. */
+static void ldpc_enc(const fec_config_t *f, const uint8_t *d, uint8_t *c) { UNUSED(f); ldpc_encode(ldpc_default(), d, c); }
+static int ldpc_dec(const fec_config_t *f, uint8_t *c, uint8_t *d) { UNUSED(f); return ldpc_decode(ldpc_default(), c, d); }
+
 typedef struct {
     fec_code_info_t info;
     block_enc_fn enc;
@@ -69,6 +74,9 @@ static const code_entry_t CODES[] = {
     {{CODE_BCH157, "bch157", "BCH(15,7)", 15, 7, 2}, bch157_enc, bch157_dec},
     {{CODE_BCH3116, "bch3116", "BCH(31,16)", 31, 16, 3}, bch3116_enc, bch3116_dec},
     {{CODE_RS, "rs", "RS(24,16) over GF(256)", 192, 128, 4}, rs_enc, rs_dec},
+    /* t = 2: every 1- and 2-bit error is corrected (exhaustively tested, tests/test_ldpc.c);
+     * many heavier patterns are corrected too, but nothing is guaranteed beyond 2. */
+    {{CODE_LDPC, "ldpc", "LDPC(256,128)", 256, 128, 2}, ldpc_enc, ldpc_dec},
 };
 
 #define NCODES ((int)(sizeof CODES / sizeof CODES[0]))
@@ -108,6 +116,8 @@ fec_config_t fec_config(code_id_t id) {
 
 int fec_config_valid(const fec_config_t *cfg) {
     if (entry(cfg->code) == NULL || cfg->interleave < 1) return 0;
+    /* builds the LDPC matrix here, so the first decode is not charged for it */
+    if (cfg->code == CODE_LDPC) return ldpc_default() != NULL;
     return cfg->code != CODE_RS || rs_get(RS_DATA_BYTES, cfg->rs_t) != NULL;
 }
 

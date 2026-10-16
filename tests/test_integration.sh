@@ -52,6 +52,14 @@ check "bch3116 run ok" [ $? -eq 0 ]
 check "bch3116 received 30" [ "$(val received)" = 30 ]
 check "bch3116 code reported" [ "$(val code)" = bch3116 ]
 
+echo "== integration: LDPC(256,128) bit flipping end to end (overnight C)"
+sh tools/demo.sh $PORTS --no-color --profile toll --code ldpc --seed 4 --count 30 \
+    --delay-ms 0 --idle-timeout-ms 3000 >"$OUT" 2>&1
+check "ldpc run ok" [ $? -eq 0 ]
+check "ldpc received 30" [ "$(val received)" = 30 ]
+check "ldpc code reported" [ "$(val code)" = ldpc ]
+check "ldpc 256 coded bits" [ "$(val coded_bits)" = 256 ]
+
 echo "== integration: Reed-Solomon t=6 + interleaver header fields travel end to end"
 sh tools/demo.sh $PORTS --no-color --profile hospital --code rs --rs-t 6 --seed 4 --count 30 \
     --delay-ms 0 --idle-timeout-ms 3000 >"$OUT" 2>&1

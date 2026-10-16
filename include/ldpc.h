@@ -65,7 +65,7 @@ typedef struct {
  * encoder. Deterministic for a given seed. Returns 0 ok, -1 if no valid H was found. */
 int ldpc_build(ldpc_code_t *c, uint64_t seed);
 
-/* The code used by --code ldpc (built from LDPC_SEED on first use). */
+/* The code used by --code ldpc (built from LDPC_SEED on first use; NULL if that failed). */
 const ldpc_code_t *ldpc_default(void);
 
 /* 128 data bits -> 256 code bits (one bit per uint8_t). */

@@ -57,6 +57,7 @@ typedef struct {
     ladder_id_t ladder;        /* --ladder {mixed,rs}  adaptive code ladder, default mixed */
     int seeds;                 /* --seeds N       bench --strategies: N seeds, mean + 95% CI (0 = off) */
     double corrupt_header;     /* --corrupt-header P  channel: corrupt the header of a DATA packet w.p. P */
+    const char *compare_codes; /* --compare-codes a,b,c  bench: sweep only these codes (overnight C) */
 } cli_opts_t;
 
 void cli_defaults(cli_opts_t *o);

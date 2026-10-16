@@ -39,7 +39,7 @@ static int same_decode(const rx_decode_t *a, const rx_decode_t *b, int nbits) {
 
 TEST(decode_identical_with_truth_present_zeroed_garbage_or_stripped) {
     const code_id_t codes[] = {CODE_NONE, CODE_HAMMING74, CODE_HAMMING1511, CODE_SECDED84,
-                               CODE_BCH157, CODE_BCH3116, CODE_RS};
+                               CODE_BCH157, CODE_BCH3116, CODE_RS, CODE_LDPC};
     rng_t r;
     rng_seed(&r, 6);
     int mismatches = 0, frames = 0, with_errors = 0;

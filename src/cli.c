@@ -33,7 +33,7 @@ void cli_defaults(cli_opts_t *o) {
 void cli_usage(FILE *f, const char *prog) {
     fprintf(f,
         "usage: %s [flags]\n"
-        "  --code {none,hamming74,hamming1511,secded84,bch157,bch3116,rs}  (default hamming74)\n"
+        "  --code {none,hamming74,hamming1511,secded84,bch157,bch3116,rs,ldpc}  (default hamming74)\n"
         "  --profile {toll,hospital}   interference profile (default toll)\n"
         "  --model {bsc,ge,burst}      noise model (default: profile's model)\n"
         "  --p <float>                 bsc: flip prob | ge: p_good->bad | burst: burst prob/frame\n"
@@ -68,6 +68,7 @@ void cli_usage(FILE *f, const char *prog) {
         "  --schedule <spec>           channel: profile schedule, e.g. toll:200,hospital:200\n"
         "  --strategies [--trace FILE] bench: compare strategies on the --schedule channel\n"
         "  --seeds <int>               bench --strategies: seeds seed..seed+N-1, mean + 95%% CI\n"
+        "  --compare-codes <list>      bench: sweep only these codes, e.g. bch157,bch3116,rs,ldpc\n"
         "  --jsonl <file>              tollgate: live JSON-lines log (one line per transmission)\n"
         "failure injection:\n"
         "  --corrupt-header <float>    channel: flip 1-4 random header bits in this fraction of packets\n",
@@ -192,6 +193,8 @@ static int apply_flag(cli_opts_t *o, const char *f, const char *v) {
         }
     } else if (!strcmp(f, "--seeds")) {
         return parse_int(f, v, 2, 1000, &o->seeds);
+    } else if (!strcmp(f, "--compare-codes")) {
+        o->compare_codes = v;
     } else if (!strcmp(f, "--corrupt-header")) {
         return parse_prob(f, v, &o->corrupt_header);
     } else {
@@ -219,7 +222,7 @@ static int is_value_flag(const char *f) {
         "--feedback-port", "--idle-timeout-ms", "--log", "--summary-file", "--out", "--frames",
         "--strategy", "--rtt-ms", "--timeout-ms", "--max-retries", "--fb-drop", "--window",
         "--up-threshold", "--down-threshold", "--start-level", "--schedule", "--trace", "--jsonl",
-        "--corrupt-header", "--seeds", "--ladder"};
+        "--corrupt-header", "--seeds", "--ladder", "--compare-codes"};
     for (size_t i = 0; i < sizeof FLAGS / sizeof FLAGS[0]; i++)
         if (!strcmp(f, FLAGS[i])) return 1;
     return 0;

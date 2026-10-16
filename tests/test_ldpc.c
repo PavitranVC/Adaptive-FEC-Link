@@ -11,6 +11,8 @@ static void random_bits(rng_t *r, uint8_t *b, int n) {
 
 static const ldpc_code_t *code(void) { return ldpc_default(); }
 
+TEST(default_code_builds) { CHECK(ldpc_default() != NULL); }
+
 /* ---- structure of H ---- */
 
 TEST(regular_3_6) {
@@ -233,6 +235,7 @@ TEST(random_word_is_detected_failure) {
 }
 
 int main(void) {
+    RUN(default_code_builds);
     RUN(regular_3_6);
     RUN(no_4_cycles);
     RUN(girth_is_reported_correctly);

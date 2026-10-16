@@ -24,11 +24,11 @@
 static size_t valid_packet(rng_t *r, uint8_t *wire, size_t cap) {
     static packet_t p;
     static const code_id_t CODES[] = {CODE_NONE, CODE_HAMMING74, CODE_HAMMING1511, CODE_SECDED84,
-                                      CODE_BCH157, CODE_BCH3116, CODE_RS};
+                                      CODE_BCH157, CODE_BCH3116, CODE_RS, CODE_LDPC};
     uint8_t id[TAG_ID_BYTES], payload[PAYLOAD_BITS];
     tag_random(r, id);
     frame_build_payload(id, payload);
-    fec_config_t fc = fec_config(CODES[rng_below(r, 7)]);
+    fec_config_t fc = fec_config(CODES[rng_below(r, 8)]);
     fc.rs_t = 1 + (int)rng_below(r, 16);
     fc.interleave = 1 + (int)rng_below(r, 8);
     memset(&p, 0, sizeof p);

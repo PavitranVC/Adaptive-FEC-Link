@@ -37,6 +37,9 @@ TEST(coded_sizes) {
     CHECK_EQ_INT(fec_coded_bits(&c, 128), 8 * 31);
     c = fec_config(CODE_NONE);
     CHECK_EQ_INT(fec_coded_bits(&c, 128), 128);
+    c = fec_config(CODE_LDPC);
+    CHECK_EQ_INT(fec_coded_bits(&c, 128), 256);         /* one LDPC(256,128) codeword */
+    CHECK_NEAR(fec_code_rate(&c, 128), 0.5, 1e-12);
     c = fec_config(CODE_HAMMING74);
     CHECK_NEAR(fec_code_rate(&c, 128), 4.0 / 7.0, 1e-12);
 }
@@ -83,12 +86,12 @@ TEST(all_codes_fix_one_error_per_block) {
     }
 }
 
-/* t errors in every block at once (BCH t = 2, 3) are all repaired. */
+/* t errors in every block at once (BCH t = 2, 3; LDPC t = 2) are all repaired. */
 TEST(bch_codes_fix_t_errors_per_block) {
     rng_t r;
     rng_seed(&r, 3);
-    const code_id_t ids[2] = {CODE_BCH157, CODE_BCH3116};
-    for (int i = 0; i < 2; i++) {
+    const code_id_t ids[3] = {CODE_BCH157, CODE_BCH3116, CODE_LDPC};
+    for (int i = 0; i < 3; i++) {
         fec_config_t c = fec_config(ids[i]);
         int t = fec_code_info(ids[i])->t, bn = fec_block_n(&c);
         for (int trial = 0; trial < 300; trial++) {

@@ -129,6 +129,16 @@ TEST(ladder_flag) {
     CHECK(parse(&o, 3, bad) != 0);
 }
 
+TEST(ldpc_code_and_compare_codes_flag) {
+    cli_opts_t o;
+    cli_defaults(&o);
+    CHECK(o.compare_codes == NULL);
+    const char *argv[] = {"x", "--code", "ldpc", "--compare-codes", "bch3116,ldpc"};
+    CHECK_EQ_INT(parse(&o, 5, argv), 0);
+    CHECK(o.code == CODE_LDPC);
+    CHECK(o.compare_codes && strcmp(o.compare_codes, "bch3116,ldpc") == 0);
+}
+
 TEST(ports) {
     const char *argv[] = {"x", "--channel-port", "19000", "--tollgate-port", "19001"};
     cli_opts_t o;
@@ -146,6 +156,7 @@ int main(void) {
     RUN(failure_injection_flags);
     RUN(seeds_flag);
     RUN(ladder_flag);
+    RUN(ldpc_code_and_compare_codes_flag);
     RUN(ports);
     return TEST_REPORT();
 }

@@ -13,6 +13,9 @@
  * Besides every registered code (RS with --rs-t, default 4) it also benchmarks interleaved
  * variants "hamming74+il<D>" and "bch3116+il<D>" (D = --interleave if > 1, else 8).
  * Optional filters: --code X, --model Y. Usage: bin/bench --profile toll --frames 5000 --out f.csv
+ * LDPC (overnight C) is left out of that default sweep; --compare-codes bch157,bch3116,rs,rs_t8,ldpc
+ * sweeps exactly the listed codes (same CSV format, same seeds, so the BCH/RS rows equal the
+ * ones in the default sweep) -> results/bench_ldpc*.csv in `make bench`.
  *
  * STRATEGY MODE (week 2):  bin/bench --strategies --frames N --out results/bench_strategy.csv
  *   Compares fec (fixed codes) vs arq vs harq vs adaptive with the link simulator (linksim.h,
@@ -80,11 +83,41 @@ static int has_flag(int argc, char **argv, const char *flag) {
     return 0;
 }
 
+/* --compare-codes a,b,c: exactly these codes (no interleaved variants), in that order;
+ * "rs_t8" = Reed-Solomon with t = 8 (plain "rs" uses --rs-t).
+ * Returns the number of variants, -1 for an unknown code name. */
+static int compare_variants(const cli_opts_t *o, variant_t *vs, int cap) {
+    char list[256];
+    int nv = 0;
+    snprintf(list, sizeof list, "%s", o->compare_codes);
+    for (char *name = strtok(list, ","); name && nv < cap; name = strtok(NULL, ",")) {
+        code_id_t code;
+        int t = o->rs_t;
+        if (!strncmp(name, "rs_t", 4) && sscanf(name + 4, "%d", &t) == 1) code = CODE_RS;
+        else if (fec_code_from_name(name, &code)) {
+            fprintf(stderr, "error: unknown code '%s' in --compare-codes\n", name);
+            return -1;
+        }
+        vs[nv].cfg = fec_config(code);
+        vs[nv].cfg.rs_t = t;
+        if (!fec_config_valid(&vs[nv].cfg)) {
+            fprintf(stderr, "error: invalid code '%s' in --compare-codes\n", name);
+            return -1;
+        }
+        snprintf(vs[nv].name, sizeof vs[nv].name, "%s", name);
+        nv++;
+    }
+    return nv;
+}
+
 static int build_variants(const cli_opts_t *o, int only_code, variant_t *vs) {
     int nv = 0, depth = o->interleave > 1 ? o->interleave : 8;
     for (int ci = 0; ci < fec_code_count(); ci++) {
         code_id_t code = fec_code_at(ci)->id;
         if (only_code && code != o->code) continue;
+        /* LDPC (overnight C) is benchmarked separately with --compare-codes, so the default
+         * sweep - results/bench.csv and its plots - stays exactly as before. */
+        if (code == CODE_LDPC && !only_code) continue;
         vs[nv].cfg = fec_config(code);
         vs[nv].cfg.rs_t = o->rs_t;
         if (code == CODE_RS && o->rs_t != 4)
@@ -382,7 +415,8 @@ int main(int argc, char **argv) {
            o.frames, (unsigned long long)o.seed, path);
 
     variant_t vs[16];
-    int nv = build_variants(&o, only_code, vs);
+    int nv = o.compare_codes ? compare_variants(&o, vs, 16) : build_variants(&o, only_code, vs);
+    if (nv < 0) { fclose(csv); return 2; }
     for (int vi = 0; vi < nv; vi++) {
         for (int m = NOISE_BSC; m <= NOISE_BURST; m++) {
             if (only_model && (noise_model_t)m != o.model) continue;

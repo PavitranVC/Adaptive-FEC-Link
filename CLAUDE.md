@@ -50,7 +50,7 @@ Two noise profiles (parameters are **modelling assumptions**, see `include/profi
 * UDP ports on 127.0.0.1: vehicle -> channel 9000, channel -> tollgate 9001,
   tollgate -> vehicle feedback 9002 (reserved for week 2).
 * Common flags (accepted by every binary):
-  `--code {hamming74,hamming1511,secded84,bch157,bch3116,rs}`
+  `--code {hamming74,hamming1511,secded84,bch157,bch3116,rs,ldpc}` (`ldpc` added in overnight C)
   `--profile {toll,hospital}` `--model {bsc,ge,burst}` `--p <float>` `--seed <int>`
   `--count <int>` `--delay-ms <int>`
 * Make targets: `make` (build all), `make test`, `make demo` (toll profile), `make demo-hospital`,
@@ -66,7 +66,7 @@ Two noise profiles (parameters are **modelling assumptions**, see `include/profi
 
 ```
 include/      public headers of the library (one per module)
-src/          library modules (bits, crc32, hamming, secded, gf, bch, rs, interleave, rng,
+src/          library modules (bits, crc32, hamming, secded, gf, bch, rs, ldpc, interleave, rng,
               noise, profiles, frame, codec, net, term, cli ...) -> build/libfeclink.a
 src/apps/     vehicle.c, channel.c, tollgate.c  -> bin/
 tools/        bench.c (-> bin/bench), plot.py, demo.sh, compare.sh

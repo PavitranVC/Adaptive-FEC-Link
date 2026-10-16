@@ -6,6 +6,8 @@ usage: python3 tools/plot.py results/bench.csv [--suffix _hospital] [--outdir re
        python3 tools/plot.py results/adaptive_trace.csv    (adaptive code level over time)
        python3 tools/plot.py results/bench_strategy_seeds.csv  (multi-seed means + 95% CI error bars)
        python3 tools/plot.py results/bench_ladder_rs_seeds.csv (all-RS ladder experiment)
+       python3 tools/plot.py results/bench_ldpc.csv --suffix _ldpc   (LDPC vs BCH/RS, overnight C;
+                                    --suffix _ldpc_hospital for results/bench_ldpc_hospital.csv)
 
 Writes PNGs into results/:
   success_vs_p_bsc<suffix>.png      frame success rate vs flip probability p (BSC), per code
@@ -30,15 +32,18 @@ except ImportError:
 
 # Fixed colour per code (identity follows the code, never its rank) - validated categorical
 # palette, light mode, in slot order.
-CODE_ORDER = ["none", "hamming74", "hamming1511", "secded84", "bch157", "bch3116", "rs"]
+CODE_ORDER = ["none", "hamming74", "hamming1511", "secded84", "bch157", "bch3116", "rs", "ldpc"]
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
 COLORS = {c: PALETTE[i] for i, c in enumerate(CODE_ORDER)}
 MARKERS = {"none": "o", "hamming74": "s", "hamming1511": "D", "secded84": "^",
-           "bch157": "v", "bch3116": "P", "rs": "X"}
+           "bch157": "v", "bch3116": "P", "rs": "X", "ldpc": "*"}
 LABELS = {"none": "uncoded", "hamming74": "Hamming(7,4)", "hamming1511": "Hamming(15,11)",
           "secded84": "SECDED(8,4)", "bch157": "BCH(15,7)", "bch3116": "BCH(31,16)",
-          "rs": "RS(24,16) t=4"}
+          "rs": "RS(24,16) t=4", "ldpc": "LDPC(256,128) bit-flip"}
 TEXT, MUTED, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
+# RS t=8 appears only in the LDPC comparison (same rate 0.5 as LDPC(256,128)): neutral dark grey.
+CODE_ORDER.insert(CODE_ORDER.index("ldpc"), "rs_t8")  # sorted next to RS t=4
+COLORS["rs_t8"], MARKERS["rs_t8"], LABELS["rs_t8"] = "#3b3a37", "x", "RS(32,16) t=8"
 
 
 def load(path):
@@ -439,7 +444,8 @@ def main():
         sys.exit(f"{a.csv} is empty - run 'make bench' first")
     os.makedirs(a.outdir, exist_ok=True)
     frames = rows[0]["frames"]
-    tag = f" [{a.suffix.strip('_') or 'toll'} profile, {frames} frames/point]"
+    profile = "hospital" if "hospital" in a.suffix else "toll"
+    tag = f" [{profile} profile, {frames} frames/point]"
     path = lambda name: os.path.join(a.outdir, f"{name}{a.suffix}.png")
     written = [
         sweep_plot(rows, "bsc", "bit flip probability p (log scale)",

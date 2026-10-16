@@ -55,6 +55,7 @@ FRAMES  ?= 5000
 SCHEDULE ?= toll:2000,hospital:2000,toll:2000
 SEEDS   ?= 20
 ASCHED  ?= toll:60,hospital:80,toll:100
+LDPC_CMP ?= bch157,bch3116,rs,rs_t8,ldpc
 
 .PHONY: all test sanitize unit-test integration-test demo demo-hospital demo-arq demo-harq demo-adaptive dashboard compare bench plots clean
 
@@ -132,6 +133,10 @@ bench: all
 	@mkdir -p results
 	./bin/bench --profile toll --frames $(FRAMES) --seed $(SEED) --out results/bench.csv
 	./bin/bench --profile hospital --frames $(FRAMES) --seed $(SEED) --out results/bench_hospital.csv
+	./bin/bench --profile toll --frames $(FRAMES) --seed $(SEED) --compare-codes $(LDPC_CMP) \
+		--out results/bench_ldpc.csv >/dev/null
+	./bin/bench --profile hospital --frames $(FRAMES) --seed $(SEED) --compare-codes $(LDPC_CMP) \
+		--out results/bench_ldpc_hospital.csv >/dev/null
 	./bin/bench --strategies --schedule $(SCHEDULE) --frames $(FRAMES) --seed $(SEED) \
 		--trace results/adaptive_trace.csv --out results/bench_strategy.csv
 	for r in 5 20 50; do ./bin/bench --strategies --schedule $(SCHEDULE) --frames $(FRAMES) \
@@ -144,6 +149,8 @@ bench: all
 plots:
 	$(PYTHON) tools/plot.py results/bench.csv
 	@if [ -f results/bench_hospital.csv ]; then $(PYTHON) tools/plot.py results/bench_hospital.csv --suffix _hospital; fi
+	@if [ -f results/bench_ldpc.csv ]; then $(PYTHON) tools/plot.py results/bench_ldpc.csv --suffix _ldpc; fi
+	@if [ -f results/bench_ldpc_hospital.csv ]; then $(PYTHON) tools/plot.py results/bench_ldpc_hospital.csv --suffix _ldpc_hospital; fi
 	@if [ -f results/bench_strategy.csv ]; then $(PYTHON) tools/plot.py results/bench_strategy.csv; fi
 	@if [ -f results/adaptive_trace.csv ]; then $(PYTHON) tools/plot.py results/adaptive_trace.csv; fi
 	@if [ -f results/bench_rtt_5.csv ]; then $(PYTHON) tools/plot.py results/bench_rtt_5.csv results/bench_rtt_20.csv results/bench_rtt_50.csv; fi
