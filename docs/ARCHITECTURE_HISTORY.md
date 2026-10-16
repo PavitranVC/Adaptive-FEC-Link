@@ -462,3 +462,142 @@ ASCII fallback:
 - No controller can choose "fixed RS t=4" when that is best (REPORT section 10, future work).
 
 ---
+
+## v0.4 - Overnight B/C and docs: CI, report, LDPC, demo fixes
+
+### 1. Summary
+
+The runtime architecture stayed the same; around it the project gained continuous integration
+(ubuntu + macOS + sanitizers on GitHub Actions), a sourced report (`docs/REPORT.md`) with a
+number-checking gate, and an optional eighth code, LDPC(256,128) with a Gallager bit-flipping
+decoder, benchmarked in a separate sweep so no earlier result changed. A real WSL run of the demo
+guide then fixed the demo targets and timings. Git range `a5bc434`..`53c6109` (overnight B `a5bc434`,
+`5b4c301`, `ecd770f`; gate B `9933409`; overnight C `439c5bc`, `e10f13f`, `539acca`; docs-fix
+`de1059b`, `b9f8436`; docs-timings `53c6109`).
+
+### 2. Architecture diagram
+
+```mermaid
+flowchart LR
+    V["bin/vehicle<br/>--code ldpc (new)"] -- "UDP 9000" --> C["bin/channel"]
+    C -- "UDP 9001" --> T["bin/tollgate"]
+    T -. "UDP 9002 ACK/NAK + window stats" .-> V
+    subgraph LIB["build/libfeclink.a"]
+        FEC["fec registry: 8 codes"]
+        LD["ldpc: PEG H, Gaussian-elimination encoder,<br/>bit flipping, max 50 iterations (new)"]
+        FEC --> LD
+    end
+    V --> FEC
+    T --> FEC
+    B["bin/bench --compare-codes (new)"] --> FEC
+    B -- "CSV" --> R["bench_ldpc.csv (new)<br/>bench_ldpc_hospital.csv (new)"]
+    DS["tools/demo.sh<br/>SHOWBITS switch (new)"] --> V
+    GH["GitHub Actions CI (new)<br/>ubuntu + macOS make test, ubuntu make sanitize"] -.-> B
+    REP["docs/REPORT.md (new)"] -.-> R
+```
+
+ASCII fallback:
+
+```
+ bin/vehicle --UDP 9000--> bin/channel --UDP 9001--> bin/tollgate
+  --code ldpc (new)                                    decodes ldpc too (code id 7)
+      ^                                                       |
+      +------------- UDP 9002 ACK/NAK + window stats ---------+
+
+ build/libfeclink.a: fec registry, 8 codes = none hamming74 hamming1511 secded84 bch157 bch3116 rs
+                     + ldpc.c (new): (3,6)-regular LDPC(256,128), PEG-style seeded H,
+                       Gaussian-elimination encoder, Gallager bit flipping (max 50 iterations)
+ bin/bench --compare-codes bch157,bch3116,rs,rs_t8,ldpc (new) --> bench_ldpc.csv, bench_ldpc_hospital.csv
+ tools/demo.sh: SHOWBITS env (new); make demo-harq now on the hospital profile (changed)
+ .github/workflows/ci.yml (new): ubuntu-latest + macos-latest make test, ubuntu make sanitize
+ docs/REPORT.md (new) <-- numbers checked against results/*.csv by gate B
+```
+
+The ladder, the controller and every strategy are unchanged: LDPC is not on any ladder.
+
+### 3. What changed
+
+| component | change | files / modules | commit |
+|---|---|---|---|
+| CI | GitHub Actions: build + `make test` on ubuntu-latest and macos-latest, `make sanitize` on ubuntu | `.github/workflows/ci.yml` | `a5bc434` |
+| docs | report draft with numbers from the CSVs; first CI run recorded | `docs/REPORT.md`, `PROGRESS.md`, `PLAN.md` | `5b4c301`, `ecd770f` |
+| docs | gate B: REPORT.md numbers checked; "tie within the noise" replaced by a paired difference | `docs/REPORT.md`, `PROGRESS.md` | `9933409` |
+| codes | LDPC(256,128) + bit-flipping decoder, tests first | `src/ldpc.c`, `include/ldpc.h`, `tests/test_ldpc.c` | `439c5bc` |
+| codes / bench | `--code ldpc` in the FEC registry; `bench --compare-codes`; LDPC plots | `src/fec.c`, `include/fec.h`, `tools/bench.c`, `tools/plot.py`, `Makefile` | `e10f13f` |
+| docs | honest LDPC result in all docs | `DECISIONS.md`, `PROGRESS.md`, `PLAN.md`, `README.md`, `docs/REPORT.md` | `539acca` |
+| demo | `SHOWBITS` switch; `demo-harq` uses the hospital profile; integration check | `Makefile`, `tools/demo.sh`, `tests/test_integration.sh` | `de1059b` |
+| docs | DEMO.md after a real WSL run (setup, test output, talking script, bench/plots, dashboard) | `docs/DEMO.md`, `tools/plot.py`, `PROGRESS.md` | `b9f8436` |
+| docs | DEMO.md timings from the measured WSL run | `docs/DEMO.md` | `53c6109` |
+
+### 4. Why
+
+| change | problem it solved / question it answered | evidence |
+|---|---|---|
+| CI on ubuntu + macOS | nobody had run the code on macOS; the fixed interface requires it | first run 38829733020 on `a5bc434`: 3 jobs green (PROGRESS.md); all 15 CI runs up to `53c6109` concluded "success" (GitHub Actions API, checked for this document) |
+| REPORT.md + gate B | the teacher needs one sourced report | gate B: "no mismatches; all 8 figure paths exist" (PROGRESS.md "Gate B") |
+| LDPC (optional stretch) | "would a modern code beat RS on our channels?" | hospital GE: LDPC 0.7902 vs RS t=8 0.9532 (`bench_ldpc_hospital.csv`) |
+| separate `--compare-codes` sweep (#26) | existing results must not change | `bench.csv` / `bench_hospital.csv` identical to main's except timing (DECISIONS.md "Overnight C") |
+| RS t=8 in the LDPC comparison | RS t=4 (rate 0.667) is not a same-rate rival for LDPC (0.500) | DECISIONS.md "Overnight C" |
+| `demo-harq` on hospital | on the toll profile the 20-frame demo showed no retransmission at all | **(re-run for this document)** toll, seed 42, 20 frames: 0 retransmissions; hospital: 42 retransmissions, 4 frames given up |
+| timings in DEMO.md | presenters need realistic durations | `53c6109`: demo-adaptive ~15 -> ~14 s, dashboard ~36 -> ~33 s, `make bench` ~2 -> ~1 min |
+
+### 5. Wire format / interface changes
+
+| item | v0.3 | v0.4 |
+|---|---|---|
+| code ids | 0..6 | + **7 = `ldpc`** (LDPC(256,128), 256 coded bits per frame); header format unchanged (still v2) |
+| `--code` values | 7 | 8: `... rs ldpc` |
+| new CLI flags | - | `--compare-codes <list>` (bench) |
+| make | - | `SHOWBITS` variable (default 1 for `demo`/`demo-hospital`, 0 for `demo-arq`/`demo-harq`); `demo-harq` now `--profile hospital`; no new target |
+| bench outputs | - | `results/bench_ldpc.csv`, `results/bench_ldpc_hospital.csv`; PNGs 16 -> 26 |
+| CI | none | `.github/workflows/ci.yml` |
+
+### 6. Test and verification
+
+| test | what it checks | result |
+|---|---|---|
+| 24 unit-test binaries, 158 test cases (`tests/test_*.c` at `53c6109`) | new: `test_ldpc` (zero syndrome, all 1- and 2-bit errors corrected exhaustively, success only for codewords) | pass |
+| `tests/test_integration.sh`, `tests/test_failure.sh`, `tests/test_dashboard.py` | + `--code ldpc` run, `SHOWBITS` check | pass |
+| `make test` on `main` / this branch | **(re-run for this document)** | see section E |
+| GitHub Actions CI | ubuntu + macOS `make test`, ubuntu `make sanitize` | 15 of 15 runs "success", latest run 38840463154 on `53c6109` (`main`) |
+| macOS / WSL by hand | demo guide on a real laptop | WSL run reported in PROGRESS.md / `53c6109`; macOS only through CI |
+
+### 7. What failed / what we got wrong
+
+1. **LDPC did not beat Reed-Solomon on bursts, and was the slowest decoder.** Expected: a
+   modern code at rate 1/2 is at least as good as RS t=8. Actual (seed 42, 5000 frames/point):
+   best on random errors (BSC p=0.02: **0.9874** vs BCH(31,16) 0.9750, RS t=8 0.9608), but
+   hospital GE **0.7902** vs RS t=4 0.8336 and RS t=8 0.9532, burst L=16 0.9690 and L=24 **0.6916**
+   vs 1.0000 for both RS codes (`bench_ldpc*.csv`). Mean decode time 10.5 us vs RS t=4 3.3, RS t=8
+   5.6, BCH(31,16) 6.9 us (PROGRESS.md; **re-run for this document**: 9.6 / 3.1 / 5.5 / 7.3 us -
+   timing varies, ranking identical). Root cause: hard-decision bit flipping with a short random
+   code; a frame it cannot fix runs all 50 iterations (up to ~50 us). Handled: reported, LDPC kept
+   off the ladder; soft decoding left as future work.
+2. **The first LDPC comparison used an unfair baseline.** RS t=8 (same rate 0.500) was added
+   *after* the first LDPC run, because RS t=4 has rate 0.667 (DECISIONS.md "Overnight C"). Only the
+   baseline set changed, not the LDPC code; stated openly in DECISIONS.md.
+3. **The live ARQ/HARQ demos did not match the benchmark numbers in the talking script.**
+   Expected: `make demo-arq` / `make demo-harq` illustrate the 5000-frame numbers. Actual
+   **(re-run for this document**, old `demo-harq` command = toll, Hamming(7,4), seed 42, 20 frames):
+   **0 retransmissions**, while `bench_strategy.csv` gives 0.0742 retx/frame for the same strategy
+   on toll. On the hospital profile the 20-frame demo gives 2.10 retx/frame (42 in 20 frames) vs
+   1.2528 in the benchmark. Root cause: 20 frames are far too few for a rate. Handled (`de1059b`,
+   `b9f8436`): `demo-harq` moved to the hospital profile so retransmissions are visible, and the
+   script row now shows `results/strategy_comparison.png` with the note "quote the benchmark".
+4. **DEMO.md timings were guesses until a real run.** `53c6109` changed demo-adaptive ~15 -> ~14 s,
+   dashboard ~36 -> ~33 s and `make bench` ~2 min -> ~1 min after a WSL run. `make bench` took
+   **108 s** in this container (re-run for this document), so "~1 min" is host-dependent, and
+   PROGRESS.md still says ~1:50 (see D).
+5. **The LDPC construction could not reach girth 8.** The greedy PEG avoids 4-cycles but the
+   default code has **girth 6** (DECISIONS.md "Overnight C"); every 1- and 2-bit error is still
+   corrected. Left as is.
+
+### 8. Decisions still open / limitations
+
+- Header CRC-16 (misrouting, v0.3 item 5) still open.
+- LDPC: no soft-decision (sum-product) decoder, no longer code; single seed for the LDPC sweep.
+- `docs/REPORT.md` "needs a human proofread before submission" (PROGRESS.md).
+- Run D (local tag, `make test` on the team's own macOS/WSL machines, rehearsal) is the listed next step.
+- Software simulation only: no hardware, no over-the-air channel; RTT, bit rate and noise are assumptions.
+
+---
