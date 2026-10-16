@@ -236,8 +236,8 @@ tollgate cannot recognise. Not fixed (needs a wire-format change; proposed fix: 
 * Software simulation only: **no hardware, no over-the-air measurement.** Decode times are of the simulation host.
 * Header is unprotected (open problem above); the HARQ is type I (no soft combining); BER estimate ignores failed frames.
 * The duplicate filter keeps seq mod 65536 (fine for < 65536 frames).
-* Portability: `make test` and `make sanitize` were run with gcc 13 (and `make test` with clang) on Ubuntu 24.04 only. The CI workflow
-  `.github/workflows/ci.yml` (ubuntu + macOS) is **added, not yet run**; macOS and WSL are **not verified**.
+* Portability: `make test` and `make sanitize` were run with gcc 13 (and `make test` with clang) on Ubuntu 24.04 only. CI (`.github/workflows/ci.yml`) passed on commit a5bc434 for ubuntu-latest (`make test`, `make sanitize`) and macos-latest (`make test`);
+  WSL is **not verified**.
 * The p99-latency columns vary slightly per run because the simulator adds the real measured decode time to its clock.
 * The 20-seed confidence intervals are Student-t intervals over 20 seeds on one simulated channel, not a statement about real deployments.
 

@@ -32,8 +32,7 @@ experiment) on `overnight-a`, fast-forwarded into `main` once `make test` passed
 ## CI (overnight B, task 5)
 
 `.github/workflows/ci.yml` added: `make` + `make test` on ubuntu-latest and macos-latest, plus `make sanitize`
-on ubuntu. **Workflow added, not yet run** - Ubuntu/macOS CI results are unknown until the first run;
-macOS is NOT claimed to work. matplotlib is pip-installed best-effort (plot smoke test skips if absent).
+on ubuntu. **First run (commit a5bc434, [run 38829733020](https://github.com/PavitranVC/Adaptive-FEC-Link/actions/runs/38829733020)): all 3 jobs green** - ubuntu build+test, macos-latest build+test, ubuntu `make sanitize`. Runs on the later commits were still queued when this was written. matplotlib is pip-installed best-effort (plot smoke test skips if absent).
 
 ## Report draft (overnight B, task 6)
 
