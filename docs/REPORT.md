@@ -195,7 +195,7 @@ Nothing was tuned afterwards. 20 seeds, schedule channel:
 
 Paired goodput difference of all-RS adaptive: +0.0799 +- 0.0050 vs mixed adaptive, +0.0931 +- 0.0038 vs HARQ RS t=8,
 **-0.0284 +- 0.0038 vs HARQ RS t=4**. The pre-registered criteria were met, but the all-RS controller still has lower goodput
-than always using HARQ + RS t=4 (on toll alone they tie within the noise: DECISIONS.md reports 0.643 vs 0.644). Its advantages over fixed RS t=4 are fewer retransmissions
+than always using HARQ + RS t=4 (on toll alone they tie: 0.6434 vs 0.6441, paired difference -0.0007 +- 0.0009, CI includes 0). Its advantages over fixed RS t=4 are fewer retransmissions
 and a lower p99 latency, not goodput.
 
 ![all-RS ladder](../results/ladder_rs_experiment.png)
