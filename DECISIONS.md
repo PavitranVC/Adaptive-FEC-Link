@@ -31,8 +31,9 @@ Format: what was chosen / the alternative / why.
   96 of 100 (83 lost + 13 misrouted = 4.8%). Most are dropped as malformed/invalid (magic,
   version, type, nbits, code fields); a flipped seq bit *misroutes* the frame (the ID is read,
   but filed under another seq) and can make the tollgate discard the real owner of that seq as
-  a "duplicate". HARQ hides most of it (a dropped frame is simply retransmitted): 0.15% / 0.6%
-  of frames are lost or misrouted at P = 0.01 / 0.05. But the tollgate **cannot see misrouting**:
+  a "duplicate". HARQ hides most of it (a dropped frame is simply retransmitted): 0.1% / 0.5%
+  of frames are lost or misrouted at P = 0.01 / 0.05 (0.15% / 0.6% not delivered correctly when
+  the "failed" column is included). But the tollgate **cannot see misrouting**:
   its summary over-reports (2003 "correct" frames out of 2000 sent at P = 0.2). The parts that do
   not depend on the header (decoding, CRC, classification) never crashed. Conclusion: keeping
   the header out of the noise (decision #1) is a real assumption, worth ~1 lost frame per
@@ -332,7 +333,7 @@ Known limitations found (not fixed - design changes, see PROGRESS.md "Open probl
   | success rate | -0.051 +- 0.009 pp | -0.049 +- 0.009 pp |
   | goodput | **+0.0133 +- 0.0024** | -0.1083 +- 0.0030 |
   | retx / frame | +0.051 +- 0.002 | **-0.019 +- 0.003** |
-  | p99 latency | +0.002 ms (decode-time noise, practically 0) | **-8.7 +- 5.1 ms** |
+  | p99 latency | +0.001-0.002 ms (real decode-time jitter, differs per run; practically 0) | **-8.7 +- 5.1 ms** |
 
   So: (1) adaptive's goodput advantage over HARQ + RS t=8 IS outside the confidence interval, but
   it is small (+2.7%) and costs 0.05 pp of success. (2) HARQ + RS t=4 is NOT better on every
