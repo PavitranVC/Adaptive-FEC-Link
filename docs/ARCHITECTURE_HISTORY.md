@@ -601,3 +601,97 @@ The ladder, the controller and every strategy are unchanged: LDPC is not on any 
 - Software simulation only: no hardware, no over-the-air channel; RTT, bit rate and noise are assumptions.
 
 ---
+
+## A. Architecture evolution at a glance
+
+Counts computed with `git ls-tree` / `git show` at the last commit of each version
+(`aa2aaac`, `fc5dc28`, `754e3e9`, `53c6109`). "Test cases" = `RUN(...)` lines in `tests/test_*.c`.
+
+| | v0.1 (`aa2aaac`) | v0.2 (`fc5dc28`) | v0.3 (`754e3e9`) | v0.4 (`53c6109`) |
+|---|---|---|---|---|
+| processes | vehicle, channel, tollgate (+ in-process `bin/bench`) | same + `tools/dashboard.py` HTTP server | same | same |
+| feedback channel | UDP 9002 reserved, unused | ACK/NAK + window stats, 22 bytes | same (+ loss / garbage tested) | same |
+| packet header | v1, 14 bytes | v2, 16 bytes (+attempt, +strategy) | v2 (validation before seq bookkeeping) | v2 (+ code id 7) |
+| codes (`--code`) | 7: none, hamming74, hamming1511, secded84, bch157, bch3116, rs | 7 | 7 | 8: + ldpc |
+| strategies | FEC only | fec, arq, harq, adaptive | same + HARQ RS t=4 / t=8 baselines in the bench | same |
+| controller | none | mixed ladder L0-L5, one decision per W=32 | + all-RS ladder (`--ladder rs`, 5 rungs) | unchanged |
+| library modules (`src/*.c`) | 19 | 26 (+adapt, feedback, linksim, receiver, schedule, sender, window) | 27 (+stats) | 28 (+ldpc) |
+| observability | console summary, coloured bit map, `--log`, `--summary-file` | + `--jsonl`, live dashboard | + `malformed=` / `invalid=` / `duplicates=` counters | + `SHOWBITS` switch |
+| unit-test binaries / test cases | 15 / 91 | 20 / 123 | 23 / 143 | 24 / 158 |
+| test scripts | `test_integration.sh` | same; `test_dashboard.py` referenced but missing | + `test_failure.sh`, `test_dashboard.py`, `make sanitize`, fuzz | same |
+| CI | none | none | none | GitHub Actions: ubuntu + macOS `make test`, ubuntu `make sanitize` |
+| `make bench` CSV files | 2 | 4 | 13 | 15 |
+| tracked plots (`results/*.png`) | 10 | 12 | 16 | 26 |
+| key limitation | bursts beyond a code's design lose frames; no retransmission | adaptive never compared with "always strongest code" | header unprotected (misrouting); adaptive below fixed HARQ + RS t=4 | LDPC loses on bursts; no hardware; header still unprotected |
+
+## B. Results timeline
+
+| version | headline result | number | source |
+|---|---|---|---|
+| v0.1 | best code, toll, random errors (BSC p=0.01) | BCH(31,16) 0.9986 (rate 0.516) | `bench.csv` |
+| v0.1 | best codes, hospital GE p_gb=0.005 | BCH(31,16)+il8 0.8374 (rate 0.516), RS t=4 0.8336 (rate 0.667) | `bench_hospital.csv` |
+| v0.1 | SILENT_WRONG | 0 of 1,395,000 frames per profile | `bench.csv`, `bench_hospital.csv` |
+| v0.2 | strategies on the toll->hospital->toll schedule, seed 42 | adaptive 0.9994 success, 0.0764 retx/frame, p99 33.211 ms; ARQ 0.8194 / 1.7828 / 94.009 ms; HARQ BCH(31,16) 0.9940 / 0.1980 / 76.226 ms | `bench_strategy.csv` |
+| v0.3 | goodput, seed 42 | adaptive 0.5047, HARQ RS t=8 0.4903, HARQ RS t=4 0.6121 | `bench_strategy.csv` |
+| v0.3 | goodput, 20 seeds, mean +- 95% CI | adaptive 0.5043 +- 0.0025, HARQ RS t=8 0.4910 +- 0.0005, HARQ RS t=4 0.6126 +- 0.0012 | `bench_strategy_seeds.csv` |
+| v0.3 | paired difference adaptive - HARQ RS t=4, 20 seeds | goodput -0.1083 +- 0.0030; retx -0.0194 +- 0.0025; p99 -8.74 +- 5.06 ms | `bench_strategy_seeds_diff.csv` |
+| v0.3 | all-RS ladder, 20 seeds | goodput 0.5841 +- 0.0040, success 0.99999; paired vs HARQ RS t=4: -0.0284 +- 0.0038 | `bench_ladder_rs_seeds*.csv` |
+| v0.3 | RTT sensitivity, p99 at 5 / 20 / 50 ms | ARQ 26.509 / 94.009 / 229.009 ms; adaptive 10.712 / 33.212 / 78.212 ms | `bench_rtt_*.csv` (values as in REPORT 7.3) |
+| v0.3 | header corruption, HARQ, P=0.2 | tollgate claims 2003 CORRECT of 2000 sent | `header_corruption.csv` (via DECISIONS.md #1; not regenerated for this document) |
+| v0.4 | LDPC(256,128) vs RS t=8 (same rate) | BSC p=0.02: 0.9874 vs 0.9608; hospital GE: 0.7902 vs 0.9532; burst L=24: 0.6916 vs 1.0000 | `bench_ldpc.csv`, `bench_ldpc_hospital.csv` |
+
+## C. Lessons learned
+
+- **Evaluate a controller once per window of evidence, not on every sample.** A sliding window
+  checked every frame gave correlated chances to fire and flapped 14 times (v0.2, failure 1).
+- **Measure before adding a "standard" improvement.** The bit interleaver everyone expects to help
+  cut RS t=4 from 83.4% to 59.8% (v0.2, failure 2).
+- **Always include the trivial strong baseline.** "Always HARQ + RS t=4" beat the adaptive
+  controller on goodput (0.613 vs 0.504); without that baseline the main claim would have stood
+  (v0.3, failures 1 and 7).
+- **One seed is an anecdote.** The single-seed "RS t=4 wins on every metric" flipped on
+  retransmissions and p99 with 20 seeds; seed 42 was a lucky p99 (v0.3, failure 2).
+- **Attack your own inputs.** Failure injection and sanitizers found 4 real bugs in code that had
+  passed every functional test (v0.3, failures 3 and 4).
+- **Test on a fresh clone, not the working copy.** A `.gitignore` pattern hid a test file, so
+  `make test` failed for everyone but the author (v0.2, failure 3).
+- **Small demos do not show rates.** 20 frames gave 0 retransmissions where the benchmark gives
+  0.074/frame; quote the benchmark, show the demo (v0.4, failure 3).
+- **Fair comparisons need equal rates.** LDPC first ran against RS t=4 (rate 0.667) before RS t=8
+  (0.500) was added, and against the fair baseline it loses on bursts (v0.4, failures 1-2).
+
+## D. Doc issues
+
+Disagreements found while writing this document. None was fixed here (documentation-only task
+limited to this file and two links); git and the CSVs are taken as correct.
+
+| # | where | says | git / CSV / re-run says |
+|---|---|---|---|
+| 1 | `PROGRESS.md` line 4 | tag `v0.2-week2` "exists only locally" (HTTP 403) | `git ls-remote --tags origin`: `v0.2-week2` -> `fc5dc28` exists on GitHub |
+| 2 | `PROGRESS.md` (CI section), `PLAN.md` (overnight B task 5) | later CI runs "still queued"; workflow "not yet run" | all 15 CI runs, up to `53c6109` on `main`, concluded "success" |
+| 3 | `make bench` duration | DEMO.md "~1 min"; PROGRESS.md "~1:50"; REPORT.md "about 100 s" | 108 s in this container; host-dependent |
+| 4 | `PROGRESS.md` docs-fix section | dashboard "120 ms/frame (~36 s + 3 s)" | `docs/DEMO.md` after `53c6109`: "~33 s of demo after a 3 s start" |
+| 5 | `docs/DEMO.md` talking script rows 6 and 8 | single-seed numbers: HARQ RS "32 ms", adaptive "99.94%", goodput "0.505 against 0.490" | README uses the 20-seed means: p99 42 +- 5 ms for HARQ RS t=4 (32 ms was seed luck, 11 of 20 seeds), adaptive 99.95%, goodput 0.504 vs 0.491 |
+| 6 | `README.md` intro "Codes:", `docs/DEMO.md` section 1 and flag table | code list without `ldpc` | `src/fec.c`, `bin/bench --help`, CLAUDE.md list 8 codes incl. `ldpc` |
+| 7 | `README.md` | "Decode latency is 2-8 microseconds per frame for every code" | REPORT.md 7.1: BCH(31,16) 9.135 us; regenerated `bench.csv`: up to 10.496 us (BCH(31,16)+il8); LDPC up to ~50 us |
+| 8 | `docs/DEMO.md` section 2, `CLAUDE.md` | port 9002 "reserved for week-2 feedback" | used since `5c3040a` (ACK/NAK + window stats) |
+| 9 | `include/packet.h` comment | "version (1)" | `#define PACKET_VERSION 2` since `5c3040a` (code comment; not changed here) |
+| 10 | `DECISIONS.md` decision #12 | RS t=4 hospital 83.4% -> 77.4 / 69.5 / 59.8% with d = 2 / 4 / 8 | no CSV holds RS + interleaver; UDP re-run (seed 42): 84.1 / 78.2 / 70.4 / 60.6% - same trend, not bit-identical |
+| 11 | commit `5c3040a` message | "Stop-and-Wait ARQ and Hybrid ARQ ..." | the commit also added `src/adapt.c` and `src/window.c` (the first, flapping controller) |
+| 12 | `PROGRESS.md` "Decisions to review" | decision 20 listed before 19 | ordering only |
+
+## E. How to reproduce each version
+
+```sh
+git clone https://github.com/PavitranVC/Adaptive-FEC-Link.git && cd Adaptive-FEC-Link
+git checkout <commit>      # detached HEAD
+make && make test
+make bench                 # optional: regenerates results/*.csv (git-ignored)
+```
+
+| version | commit | `make` + `make test` | verified for this document |
+|---|---|---|---|
+| v0.1 | `aa2aaac` | passes | **yes**: `make` exit 0, `make test` exit 0, "Integration test passed." (plot test skipped, no matplotlib) |
+| v0.2 | `fc5dc28` (tag `v0.2-week2`) | **fails on a fresh clone**: `tests/test_dashboard.py` missing (v0.2 failure 3); all C tests and the integration script pass before that line | **yes**: exit 2, as described |
+| v0.3 | `754e3e9` | expected to pass (PROGRESS.md: all green, gcc 13 + clang) | no |
+| v0.4 | `53c6109` (`main`) | passes; also green in CI (ubuntu, macOS, sanitize) | **yes** (this branch = `53c6109` + docs): "All unit tests passed.", "Integration test passed.", "Failure-injection test passed.", "dashboard tests passed", exit 0 |
