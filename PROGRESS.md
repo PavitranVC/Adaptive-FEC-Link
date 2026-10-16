@@ -29,6 +29,12 @@ experiment) on `overnight-a`, fast-forwarded into `main` once `make test` passed
 | Overnight A3 `bench --strategies --seeds N` (mean + 95% CI, Student t), paired differences, `results/goodput_vs_success_ci.png` | done - see answers below |
 | Overnight A4 NEW experiment: all-RS adaptive ladder (`--ladder rs`), pre-registered in DECISIONS.md | done - hypothesis HELD (goodput 0.584 vs 0.504 mixed / 0.491 RS t=8, success 99.999%); still below fixed HARQ + RS t=4 (0.613) |
 
+## CI (overnight B, task 5)
+
+`.github/workflows/ci.yml` added: `make` + `make test` on ubuntu-latest and macos-latest, plus `make sanitize`
+on ubuntu. **Workflow added, not yet run** - Ubuntu/macOS CI results are unknown until the first run;
+macOS is NOT claimed to work. matplotlib is pip-installed best-effort (plot smoke test skips if absent).
+
 ## Test status
 
 `make test` = 23 unit-test binaries (new: `test_packet` malformed/truncated/header-corruption,
