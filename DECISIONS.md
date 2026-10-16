@@ -392,3 +392,32 @@ Written and committed BEFORE any code for it was written or any run was made.
   default ladder stays `mixed` so every earlier result and demo is unchanged.
 - Limitation: the live dashboard labels levels with the mixed ladder's names; with `--ladder rs`
   the level NUMBERS are right but the axis labels are not (the tollgate log has the code name).
+
+## Overnight C - LDPC with a bit-flipping decoder (optional stretch)
+
+Written before any benchmark run of the LDPC code; nothing below was changed after seeing results.
+
+- 🔀 chose a **(3,6)-regular LDPC code with n = 256, k = 128 (rate 1/2)** over a longer or
+  irregular code because the 128-bit payload (ID + CRC-32) is then exactly ONE codeword (no
+  padding, like RS) and a (3,6)-regular H is the textbook Gallager example students can explain.
+  Same rate as RS t=8 (0.500), so it sits between RS t=4 (0.667) and RS t=8 in overhead.
+- 🔀 chose a **simplified progressive-edge-growth (PEG) construction from the seeded RNG** over
+  Gallager's banded construction because 256 is not a multiple of 6 (Gallager's bands need n/6
+  rows each) and PEG lets us forbid 4-cycles edge by edge: each new edge goes to a least-used
+  check that is > 5 hops away (no 6-cycle), else > 3 hops away (no 4-cycle); attempts that get
+  stuck or give a rank-deficient H are thrown away and the RNG continues (deterministic).
+  Measured: the default code (seed 2026) is found on attempt 1, has **girth 6** (the greedy cannot
+  avoid every 6-cycle at n = 256) and full rank 128.
+- 🔀 chose **Gaussian elimination to a systematic generator with permuted positions** (pivot
+  columns = parity, the rest = data) over an approximate-lower-triangular (Richardson-Urbanke)
+  encoder because it is the straightforward textbook method; cost O(k * m) = 16k XORs per frame,
+  irrelevant here.
+- 🔀 chose **parallel Gallager bit flipping (flip ALL bits that violate the maximum number of
+  checks), at most 50 iterations, hard decision** over a weighted / sum-product decoder because
+  the channel delivers hard bits and the brief asks for bit flipping. 50 iterations is a fixed,
+  untuned choice. A failure (syndrome != 0 after 50 iterations) leaves the word as received,
+  like the BCH decoder, and is a DETECTED failure; success is only reported when the syndrome
+  is zero, so a "success" is always a codeword.
+- Tested exhaustively before integration: every single error (256 positions x 8 codewords) and
+  every one of the 32640 double-error patterns is corrected (the decoder only sees H e, so one
+  codeword covers all of them), despite girth 6.
