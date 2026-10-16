@@ -7,6 +7,8 @@
 # Output lines are prefixed [VEHICLE] / [CHANNEL] / [TOLLGATE] by the programs themselves.
 cd "$(dirname "$0")/.." || exit 1
 BIN=${BIN:-bin}      # make sanitize sets BIN=build/asan/bin
+SHOWBITS=${SHOWBITS:-1}   # 0 = no per-frame bit maps (make demo-arq / demo-harq default)
+SB="--show-bits"; [ "$SHOWBITS" = 0 ] && SB=""
 mkdir -p results/tmp
 
 for b in $BIN/tollgate $BIN/channel $BIN/vehicle; do
@@ -21,7 +23,7 @@ cleanup() {
 trap 'cleanup; exit 130' INT TERM
 
 echo "=== Adaptive FEC link demo: tollgate <- channel <- vehicle ($*) ==="
-./$BIN/tollgate "$@" --show-bits --log results/tmp/tollgate.csv \
+./$BIN/tollgate "$@" $SB --log results/tmp/tollgate.csv \
     --summary-file results/tmp/summary.txt &
 TG=$!
 sleep 0.3

@@ -86,6 +86,15 @@ check "arq retransmitted at least once" [ "$(val retransmissions)" -ge 1 ]
 check "arq sent uncoded frames" [ "$(val code)" = none ]
 check "arq vehicle saw ACKs" grep -q 'ACK after' "$OUT"
 
+echo "== integration: SHOWBITS=0 suppresses bit maps, default keeps them (demo.sh)"
+SHOWBITS=0 sh tools/demo.sh $PORTS --no-color --profile hospital --seed 42 --count 10 \
+    --delay-ms 0 --idle-timeout-ms 3000 >"$OUT" 2>&1
+check "showbits=0 run ok" [ $? -eq 0 ]
+check "showbits=0 prints no bit-map legend" sh -c "! grep -q 'bit map legend' '$OUT'"
+sh tools/demo.sh $PORTS --no-color --profile hospital --seed 42 --count 10 \
+    --delay-ms 0 --idle-timeout-ms 3000 >"$OUT" 2>&1
+check "default run prints bit-map legend" grep -q 'bit map legend' "$OUT"
+
 echo "== integration: Hybrid ARQ with 30% injected feedback loss"
 sh tools/demo.sh $PORTS --no-color --profile toll --strategy harq --code hamming74 --seed 8 \
     --count 20 --rtt-ms 2 --timeout-ms 40 --fb-drop 0.3 --delay-ms 0 --idle-timeout-ms 3000 >"$OUT" 2>&1

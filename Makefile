@@ -6,8 +6,8 @@
 #   make test          build + run all unit tests and the integration test
 #   make demo          one-terminal demo, TOLL_PLAZA profile
 #   make demo-hospital one-terminal demo, HOSPITAL_IMAGING profile
-#   make demo-arq      one-terminal demo, Stop-and-Wait ARQ (uncoded + CRC, retransmit)
-#   make demo-harq     one-terminal demo, Hybrid ARQ (FEC first, retransmit on CRC fail)
+#   make demo-arq      one-terminal demo, Stop-and-Wait ARQ (uncoded + CRC, retransmit); SHOWBITS=1 adds bit maps
+#   make demo-harq     one-terminal demo, Hybrid ARQ (FEC first, retransmit on CRC fail; hospital profile so retransmissions show)
 #   make demo-adaptive adaptive code ladder on a toll -> hospital -> toll channel schedule
 #   make dashboard     live web dashboard (http://127.0.0.1:8050/) + the adaptive demo
 #   make compare       hamming74 vs bch157 on the same seed, side by side
@@ -54,6 +54,7 @@ CCOUNT  ?= 1000
 FRAMES  ?= 5000
 SCHEDULE ?= toll:2000,hospital:2000,toll:2000
 SEEDS   ?= 20
+SHOWBITS ?=
 ASCHED  ?= toll:60,hospital:80,toll:100
 LDPC_CMP ?= bch157,bch3116,rs,rs_t8,ldpc
 
@@ -107,16 +108,16 @@ integration-test: all $(BUILD)/tests/inject
 	@if command -v $(PYTHON) >/dev/null 2>&1; then $(PYTHON) tests/test_dashboard.py; fi
 
 demo: all
-	sh tools/demo.sh --profile toll --code $(CODE) --seed $(SEED) --count $(COUNT) --delay-ms $(DELAY)
+	SHOWBITS=$(or $(SHOWBITS),1) sh tools/demo.sh --profile toll --code $(CODE) --seed $(SEED) --count $(COUNT) --delay-ms $(DELAY)
 
 demo-hospital: all
-	sh tools/demo.sh --profile hospital --code $(CODE) --seed $(SEED) --count $(COUNT) --delay-ms $(DELAY)
+	SHOWBITS=$(or $(SHOWBITS),1) sh tools/demo.sh --profile hospital --code $(CODE) --seed $(SEED) --count $(COUNT) --delay-ms $(DELAY)
 
 demo-arq: all
-	sh tools/demo.sh --profile toll --strategy arq --seed $(SEED) --count $(COUNT) --delay-ms $(DELAY)
+	SHOWBITS=$(or $(SHOWBITS),0) sh tools/demo.sh --profile toll --strategy arq --seed $(SEED) --count $(COUNT) --delay-ms $(DELAY)
 
 demo-harq: all
-	sh tools/demo.sh --profile toll --strategy harq --code $(CODE) --seed $(SEED) --count $(COUNT) --delay-ms $(DELAY)
+	SHOWBITS=$(or $(SHOWBITS),0) sh tools/demo.sh --profile hospital --strategy harq --code $(CODE) --seed $(SEED) --count $(COUNT) --delay-ms $(DELAY)
 
 demo-adaptive: all
 	sh tools/demo.sh --strategy adaptive --schedule $(ASCHED) --window 16 --seed $(SEED) \
