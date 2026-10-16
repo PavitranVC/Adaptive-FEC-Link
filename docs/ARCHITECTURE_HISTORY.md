@@ -756,7 +756,13 @@ one in the linear history.
 | `v0.2.0` | `fc5dc28` | last commit of v0.2 |
 | `v0.2-week2` | `fc5dc28` | older tag of the same commit, kept (can be deleted by the repository owner) |
 | `v0.3.0` | `c4d7bf4` | tip of the v0.3 release branch, before the hardening commits |
-| `v0.4.0` | `main` after the documentation cleanup | current release |
+| `v0.4.0` | `216beb6` (main after the documentation cleanup) | current release |
 
-Rename status: see [STATUS.md](STATUS.md#branches-and-tags) for which renames and tag pushes were
-completed on GitHub.
+**State on GitHub (2026-10-16).** All 11 new branch names exist and were confirmed with
+`git ls-remote` to point at exactly the same commit as their old names. Deleting the old names
+was refused by the build environment's git proxy (HTTP 403), so **both names exist for now**;
+the repository owner removes the old ones in GitHub -> Settings -> Branches (or the branch list).
+The four `v0.x.0` tags were created as annotated tags in the build environment, but pushing them
+was refused (HTTP 403); [STATUS.md](STATUS.md#branches-and-tags) lists the exact commands to
+create and push them from a local clone. `v0.4.0` is `216beb6` (main after the documentation
+cleanup); this map was updated by the commit after it.

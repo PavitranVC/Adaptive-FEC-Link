@@ -203,11 +203,41 @@ All direction-changing choices are design records in [DESIGN_DECISIONS.md](DESIG
 
 ## Branches and tags
 
-Working branch names are being replaced by technical names (`release/vX.Y-<topic>`,
-`feature/<topic>`, `docs/<topic>`, `chore/<topic>`) and versions get annotated tags
-`v0.1.0`..`v0.4.0`; the full old -> new map with commit ranges is in
-[ARCHITECTURE_HISTORY.md](ARCHITECTURE_HISTORY.md#branch-and-tag-map). Status: planned (updated
-when the renames are done).
+Branches use technical names (`release/vX.Y-<topic>`, `feature/<topic>`, `docs/<topic>`,
+`chore/<topic>`); the full map with commit ranges is in
+[ARCHITECTURE_HISTORY.md](ARCHITECTURE_HISTORY.md#branch-and-tag-map).
+
+| old name | new name | commit | new name on GitHub | old name deleted |
+|---|---|---|---|---|
+| `claude/bold-gauss-xza289` | `release/v0.1-core-fec-pipeline` | `aa2aaac` | yes (same SHA) | no - HTTP 403 |
+| `week2` | `release/v0.2-arq-adaptive-dashboard` | `fc5dc28` | yes (same SHA) | no - HTTP 403 |
+| `final-polish` | `release/v0.3-evaluation-goodput-rtt` | `c4d7bf4` | yes (same SHA) | no - HTTP 403 |
+| `overnight-a` | `feature/failure-injection-statistics` | `bde2409` | yes (same SHA) | no - HTTP 403 |
+| `overnight-b` | `feature/ci-and-report` | `ecd770f` | yes (same SHA) | no - HTTP 403 |
+| `overnight-c` | `feature/ldpc-code` | `539acca` | yes (same SHA) | no - HTTP 403 |
+| `gate-a` | `chore/verify-evaluation-numbers` | `754e3e9` | yes (same SHA) | no - HTTP 403 |
+| `gate-b` | `chore/verify-report-numbers` | `9933409` | yes (same SHA) | no - HTTP 403 |
+| `docs-fix` | `docs/demo-guide-fixes` | `b9f8436` | yes (same SHA) | no - HTTP 403 |
+| `docs-timings` | `docs/demo-timings` | `53c6109` | yes (same SHA) | no - HTTP 403 |
+| `docs-architecture` | `docs/architecture-history` | `a7f5d68` | yes (same SHA) | no - HTTP 403 |
+
+The build environment's git proxy refused branch deletion (HTTP 403). To finish the rename, the
+repository owner deletes the 11 old names in GitHub -> Settings -> Branches (or the branch list),
+after checking that each new name shows the same commit.
+
+Tags (annotated) could not be pushed from the build environment (HTTP 403). From a local clone:
+
+```sh
+git fetch origin
+git tag -a v0.1.0 -m "v0.1.0: core FEC pipeline (phases 0-6)" aa2aaaca532ef646bd211954bc9a214ea96a627c
+git tag -a v0.2.0 -m "v0.2.0: feedback, ARQ / Hybrid ARQ, adaptive controller, dashboard" fc5dc2860c57b207301e825706212cba6d3f049f
+git tag -a v0.3.0 -m "v0.3.0: evaluation - goodput, HARQ baselines, RTT sensitivity" c4d7bf47f3b06c5b8558a0c6f1ae15838b97a639
+git tag -a v0.4.0 -m "v0.4.0: CI, report, LDPC, demo fixes, documentation cleanup" 216beb6966ed85620c7ae7d1d895755e9df3b203
+git push origin v0.1.0 v0.2.0 v0.3.0 v0.4.0
+```
+
+The older tag `v0.2-week2` (-> `fc5dc28`, same commit as `v0.2.0`) is kept; the owner may delete
+it with `git push origin --delete v0.2-week2` once `v0.2.0` exists.
 
 ## Demo guide fixes (v0.4)
 
