@@ -140,7 +140,7 @@ sh tools/demo.sh --code rs --corrupt-header 0.05 --count 100 --delay-ms 50
 ### Adaptive FEC (week 2, the highlight)
 
 ```sh
-make demo-adaptive             # schedule toll:60,hospital:80,toll:100, 240 frames, ~15 s
+make demo-adaptive             # schedule toll:60,hospital:80,toll:100, 240 frames, ~14 s
 make demo-adaptive ASCHED=toll:100,hospital:150,toll:150 DELAY=60
 ```
 
@@ -161,7 +161,7 @@ L2 BCH(15,7), L3 BCH(31,16), L4 RS t=4, L5 RS t=8. HARQ retransmits on CRC failu
 
 ```sh
 make dashboard                 # prints: open http://127.0.0.1:8050/  then runs the adaptive demo
-                               # at 120 ms/frame: ~36 s of demo after a 3 s start
+                               # at 120 ms/frame: ~33 s of demo after a 3 s start
 PORT=8080 make dashboard       # other port
 ```
 
@@ -224,7 +224,7 @@ Same seed means the same sequence of tag IDs and the same noise process for ever
 ## 5. Benchmark and plots
 
 ```sh
-make bench                      # ~2 min; writes the CSVs below (all git-ignored, plots are tracked)
+make bench                      # ~1 min; writes the CSVs below (all git-ignored, plots are tracked)
 pip install -r requirements.txt # inside the venv (section 0.4)
 make plots                      # CSVs -> results/*.png
 ```
