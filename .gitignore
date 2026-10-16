@@ -32,3 +32,12 @@ results/tmp/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Scratch / editor backups (never tracked)
+*.tmp
+*.swp
+*~
+*.orig
+*.rej
+compile_commands.json
+.cache/
