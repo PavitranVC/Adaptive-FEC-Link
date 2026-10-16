@@ -64,6 +64,24 @@ Frame success rate (CORRECT / frames). GE = Gilbert-Elliott with p_gb = 0.005.
 
 Plots: `results/*.png` (`_hospital` suffix for the hospital profile).
 
+### Optional stretch: LDPC(256,128) with a bit-flipping decoder (`--code ldpc`)
+
+(3,6)-regular, rate 1/2, seeded construction without 4-cycles, Gallager hard-decision bit
+flipping (max 50 iterations). Benchmarked separately (`results/bench_ldpc*.csv`,
+`results/*_ldpc*.png`) so the table above is unchanged. Seed 42, 5000 frames per point:
+
+| code | rate | BSC p=0.02 | toll GE | hospital GE | burst L=16 | mean decode |
+|------|------|------|------|------|------|------|
+| BCH(31,16)      | 0.516 | 0.975 | 0.960 | 0.494 | 0.013 | 6.9 us |
+| RS(24,16) t=4   | 0.667 | 0.722 | 0.976 | 0.834 | 1.000 | 3.3 us |
+| RS(32,16) t=8   | 0.500 | 0.961 | 1.000 | 0.953 | 1.000 | 5.6 us |
+| LDPC(256,128)   | 0.500 | **0.987** | 0.999 | 0.790 | 0.969 | 10.5 us |
+
+Honest result: best code for **random** errors (p = 0.015-0.03), but **worse than Reed-Solomon
+on the bursty hospital channel** and on long bursts, and the slowest decoder on average (a frame
+it cannot fix runs all 50 iterations, up to ~50 us). It replaces nothing on the adaptive ladder.
+Details: `DECISIONS.md` ("Overnight C").
+
 ## Week 2: retransmissions and adaptive FEC
 
 `--strategy fec|arq|harq|adaptive` (default `fec` = everything above). ACK/NAK feedback flows

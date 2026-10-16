@@ -421,3 +421,47 @@ Written before any benchmark run of the LDPC code; nothing below was changed aft
 - Tested exhaustively before integration: every single error (256 positions x 8 codewords) and
   every one of the 32640 double-error patterns is corrected (the decoder only sees H e, so one
   codeword covers all of them), despite girth 6.
+- 🔀 chose to keep LDPC **out of the default `bench.csv` sweep** and benchmark it with a separate
+  `bin/bench --compare-codes bch157,bch3116,rs,rs_t8,ldpc` run (`results/bench_ldpc.csv`,
+  `results/bench_ldpc_hospital.csv`, same CSV format, same seed 42, 5000 frames/point) over
+  adding it to the default sweep, because the brief says existing results must not change.
+  Checked: `bench.csv` and `bench_hospital.csv` are identical to main's (all columns except the
+  timing column), `bench_strategy.csv` identical except the latency columns (timing noise), and
+  the BCH/RS rows of `bench_ldpc*.csv` equal their rows in `bench*.csv`. The ladder, the
+  controller and every strategy row are untouched (LDPC is not on any ladder).
+- RS t=8 (`rs_t8`) was added to the comparison AFTER the first LDPC run, because RS t=4 has rate
+  0.667 and LDPC 0.500: RS t=8 is the same-rate Reed-Solomon. This changes only the baseline set;
+  the LDPC code and decoder were not touched after seeing results.
+
+### Result (single seed 42, 5000 frames per point; honest)
+
+Frame success rate (BSC and burst columns are the same in both CSVs because the swept parameter is
+explicit; "toll GE" from `bench_ldpc.csv`, "hospital GE" from `bench_ldpc_hospital.csv`, p_gb = 0.005):
+
+| code | rate | BSC p=0.01 | BSC p=0.02 | BSC p=0.03 | BSC p=0.05 | toll GE | hospital GE | burst L=16 | burst L=24 |
+|---|---|---|---|---|---|---|---|---|---|
+| BCH(31,16)      | 0.516 | 0.9986 | 0.9750 | 0.9032 | **0.5780** | 0.9596 | 0.4936 | 0.0126 | 0.0008 |
+| RS(24,16) t=4   | 0.667 | 0.9634 | 0.7218 | 0.3854 | 0.0570 | 0.9756 | 0.8336 | **1.0000** | **1.0000** |
+| RS(32,16) t=8   | 0.500 | **0.9996** | 0.9608 | 0.7568 | 0.2036 | **0.9996** | **0.9532** | **1.0000** | **1.0000** |
+| LDPC(256,128) BF | 0.500 | 0.9994 | **0.9874** | **0.9152** | 0.5510 | 0.9988 | 0.7902 | 0.9690 | 0.6916 |
+
+- **Random errors (BSC): LDPC is the best code from p = 0.015 to 0.03** (e.g. p = 0.02: 0.987 vs
+  BCH(31,16) 0.975 and RS t=8 0.961), ties RS t=8 at p <= 0.01 (3 vs 2 failures in 5000 frames:
+  noise), and is slightly worse than BCH(31,16) at p >= 0.05 (0.551 vs 0.578), where every code
+  is unusable anyway.
+- **Bursty channels: LDPC is WORSE than Reed-Solomon.** Hospital GE p_gb = 0.005: 0.790 vs RS t=4
+  0.834 (at a lower rate!) and RS t=8 0.953. Bursts L = 16 / 24: 0.969 / 0.692 vs 1.000 for both
+  RS codes. It is far better than plain BCH(31,16) on bursts (BCH needs the interleaver), because
+  the random H spreads the bits of a burst over many checks. Only at L = 32 (beyond RS t=4's 4
+  bytes) does LDPC beat RS t=4 (0.255 vs 0.141); RS t=8 still gets 1.000.
+- **Decode time: worse on average.** Clean or lightly corrupted frames decode in 2.7-3.7 us (as
+  fast as RS t=4, ~3 us, and faster than BCH(31,16), ~6 us), but a frame the decoder cannot fix
+  runs all 50 iterations: ~25-50 us per frame at BSC p >= 0.05, ~40 us at burst L = 32. Mean over
+  all sweep points: LDPC 10.5 us (toll) / 13.5 us (hospital) vs RS t=4 3.3 / 3.1, RS t=8 5.6 / 5.4,
+  BCH(31,16) 6.9 / 7.3. (Timing is of this host and varies per run.)
+- SILENT_WRONG: 0 of 155,000 LDPC frames per profile (the CRC caught every wrong codeword).
+- Bottom line: for this project's main problem (hospital bursts) the same-rate RS t=8 is better
+  in success and in decode time, so LDPC does not replace any code on the ladder. LDPC's niche
+  here is random errors at rate 1/2, where it beats BCH(31,16). A soft-decision (sum-product)
+  decoder or a longer code would very likely do better; neither was tried (out of scope, and it
+  would be tuning after seeing results). Single seed: differences of a few frames in 5000 are noise.

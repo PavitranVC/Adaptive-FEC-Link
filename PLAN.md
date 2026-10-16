@@ -36,7 +36,7 @@ outputs -> commit `phaseN: <summary>` -> push.
 - [x] Deliberate failure-injection testing (malformed packets, lost END, port in use, bursts
       longer than the code can handle, header corruption experiment).
 - [x] Final report plots (both profiles, all codes, ARQ vs FEC vs HARQ vs adaptive).
-- [ ] *Optional stretch*: LDPC with a bit-flipping decoder.
+- [x] *Optional stretch*: LDPC with a bit-flipping decoder (overnight C, see below).
 
 ## Overnight A (branch `overnight-a`)
 
@@ -50,4 +50,16 @@ outputs -> commit `phaseN: <summary>` -> push.
 
 - [x] Task 5: GitHub Actions CI (`.github/workflows/ci.yml`) - workflow added, not yet run.
 - [x] Task 6: `docs/REPORT.md` draft (numbers from results/*.csv, PROGRESS, DECISIONS).
-- [ ] Next (Run C/D): optional LDPC, tag, local test and rehearsal.
+- [x] Run C: optional LDPC (done, branch `overnight-c`).
+- [ ] Next (Run D, local): tag, local test and rehearsal.
+
+## Overnight C (branch `overnight-c`, optional stretch)
+
+- [x] Step 1: (3,6)-regular LDPC(256,128): seeded PEG-style H (no 4-cycles, full rank), systematic
+      encoder by Gaussian elimination. Tests first (`tests/test_ldpc.c`).
+- [x] Step 2: Gallager bit-flipping decoder (max 50 iterations, failure if syndrome != 0). Tests:
+      zero syndrome for every codeword, every single and double error corrected (exhaustive),
+      success never returned for a non-codeword.
+- [x] Step 3: `--code ldpc` in the FEC registry, `bin/bench --compare-codes`, `results/bench_ldpc*.csv`,
+      `results/*_ldpc*.png`; default sweep and every existing result unchanged.
+- [x] Step 4: honest comparison vs BCH/RS (DECISIONS.md "Overnight C", README, REPORT 7.6).

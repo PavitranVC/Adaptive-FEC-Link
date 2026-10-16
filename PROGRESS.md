@@ -5,6 +5,8 @@ Week 1 on `claude/bold-gauss-xza289` (merged into `main`). Week 2 on `week2`, me
 Final polish on `final-polish`, fast-forwarded into `main`.
 Overnight run A (failure injection, sanitizers + fuzzing, multi-seed statistics, all-RS ladder
 experiment) on `overnight-a`, fast-forwarded into `main` once `make test` passed.
+Overnight run C (optional LDPC stretch) on `overnight-c`, fast-forwarded into `main` once
+`make test` passed.
 
 ## Status
 
@@ -28,11 +30,29 @@ experiment) on `overnight-a`, fast-forwarded into `main` once `make test` passed
 | Overnight A2 `make sanitize` (ASan + UBSan, all tests) + `tests/test_fuzz.c` (packet/feedback/schedule parsers) | done - 1 real bug fixed (RS decoder read uninitialized memory on failure) |
 | Overnight A3 `bench --strategies --seeds N` (mean + 95% CI, Student t), paired differences, `results/goodput_vs_success_ci.png` | done - see answers below |
 | Overnight A4 NEW experiment: all-RS adaptive ladder (`--ladder rs`), pre-registered in DECISIONS.md | done - hypothesis HELD (goodput 0.584 vs 0.504 mixed / 0.491 RS t=8, success 99.999%); still below fixed HARQ + RS t=4 (0.613) |
+| Overnight C (optional) LDPC(256,128) (3,6)-regular + Gallager bit flipping, `--code ldpc`, `results/bench_ldpc*.csv` + `*_ldpc*.png` | done - best for random errors, WORSE than RS on bursts / hospital, slowest decoder on average (see below) |
 
 ## CI (overnight B, task 5)
 
 `.github/workflows/ci.yml` added: `make` + `make test` on ubuntu-latest and macos-latest, plus `make sanitize`
 on ubuntu. **First run (commit a5bc434, [run 38829733020](https://github.com/PavitranVC/Adaptive-FEC-Link/actions/runs/38829733020)): all 3 jobs green** - ubuntu build+test, macos-latest build+test, ubuntu `make sanitize`. Runs on the later commits were still queued when this was written. matplotlib is pip-installed best-effort (plot smoke test skips if absent).
+
+## LDPC (overnight C, optional stretch) - honest result
+
+`--code ldpc` = (3,6)-regular LDPC(256,128), rate 0.500, seeded PEG-style H (no 4-cycles, girth 6,
+full rank), systematic encoder by Gaussian elimination, Gallager bit flipping (max 50 iterations).
+`tests/test_ldpc.c` (tests written first): zero syndrome for every codeword, every 1- and 2-bit error
+corrected (exhaustive), success never returned for a non-codeword. Seed 42, 5000 frames/point:
+
+- Random errors: best code at BSC p = 0.02 (0.987 vs BCH(31,16) 0.975, RS t=8 0.961, RS t=4 0.722);
+  ties RS t=8 at p <= 0.01; slightly worse than BCH(31,16) at p >= 0.05.
+- **Bursts: worse than Reed-Solomon.** Hospital GE p_gb = 0.005: 0.790 vs RS t=4 0.834, RS t=8 0.953;
+  burst L = 16: 0.969 vs 1.000 (both RS); L = 24: 0.692 vs 1.000.
+- **Decode time: worst on average** (10.5 us vs RS t=4 3.3, RS t=8 5.6, BCH(31,16) 6.9; toll file):
+  ~3 us when it succeeds quickly, up to ~50 us when it fails (all 50 iterations).
+- SILENT_WRONG 0. Not on the ladder; the ladder, the controller and all earlier CSVs are unchanged
+  (checked against main: `bench.csv`, `bench_hospital.csv` identical, strategy CSV identical except
+  timing-noise latency columns).
 
 ## Report draft (overnight B, task 6)
 
@@ -47,7 +67,7 @@ Every number, figure path and file reference in `docs/REPORT.md` checked against
 
 ## Test status
 
-`make test` = 23 unit-test binaries (new: `test_packet` malformed/truncated/header-corruption,
+`make test` = 24 unit-test binaries (overnight C: `test_ldpc`; earlier: `test_packet` malformed/truncated/header-corruption,
 `test_fuzz` 450k fuzzed parser inputs, `test_stats` confidence intervals) + `tests/test_integration.sh`
 (real three-process UDP runs on ports 19100-19102: reproducibility, hospital profile, BCH, RS,
 interleaver, compare, ARQ, HARQ with 30% injected feedback loss, adaptive on a toll->hospital->toll
@@ -95,7 +115,7 @@ vs 100.000% (within 0.5 pp). Not shown: it does not beat fixed HARQ + RS t=4 on 
 ## Known issues / limitations
 
 - Nothing known broken.
-- `make bench` now takes ~1:40 (two 20-seed runs added).
+- `make bench` now takes ~1:50 (two 20-seed runs + the two LDPC comparison sweeps).
 - `results/*.png` latency plots change slightly on every `make bench` (timing noise); commit
   them only when you want to update the "final" plots.
 - The tollgate ignores duplicate frames by `seq mod 65536`, fine for runs < 65536 frames.
@@ -118,6 +138,11 @@ vs 100.000% (within 0.5 pp). Not shown: it does not beat fixed HARQ + RS t=4 on 
   CRC-16 (new header version) and drop on mismatch.
 
 ## Exact next step
+
+Run C (LDPC) is done. Next: **Run D (local)**: tag, `make test` on your own machine (macOS/WSL),
+rehearsal. LDPC is optional material - mention it in the talk only as "tried, loses to RS on
+bursts" (REPORT 7.6). The list below is the older list from runs A/B (Gate A/B are done).
+
 
 0. **Gate B**: check the REPORT.md numbers against `results/*.csv` (run `make bench` first, CSVs are git-ignored) and look at the first CI run.
 1. **Gate A**: review the "Open problems" above (header misrouting) and the 3 bugs fixed tonight
@@ -165,3 +190,10 @@ vs 100.000% (within 0.5 pp). Not shown: it does not beat fixed HARQ + RS t=4 on 
 21. Header corruption = 1-4 random header bit flips per hit packet, END exempt (failure injection).
 22. 95% CI over seeds from Student's t (not bootstrap); strategies compared by paired differences.
 23. `--ladder rs` (all-RS ladder) is a separate, pre-registered experiment; default stays `mixed`.
+
+### New in overnight run C
+
+24. LDPC = (3,6)-regular LDPC(256,128), PEG-style seeded H (no 4-cycles), Gaussian-elimination encoder.
+25. Decoder = parallel Gallager bit flipping, hard decision, max 50 iterations (not tuned).
+26. LDPC is benchmarked in a separate `--compare-codes` sweep (default sweep unchanged); RS t=8 added
+    to that comparison as the same-rate baseline.

@@ -82,6 +82,13 @@ the binomial model predicts the cheaper code fails below 0.05, probe back-off).
   (e.g. BCH(31,16) + d=8) but *hurts* RS (decision #12: RS t=4 on hospital drops from 83.4% to
   59.8% with d=8), because it spreads one burst over more bytes.
 
+**LDPC(256,128) (optional stretch, section 7.6).** A codeword is any x with H x = 0 for a sparse
+128 x 256 parity-check matrix H with 3 ones per column and 6 per row. The code is linear (the null
+space of H), so the syndrome H r = H e depends only on the error pattern. Encoding: Gaussian
+elimination turns H into [I | A] (columns permuted), so parity = A * data. Decoding: Gallager bit
+flipping - repeatedly flip the bits that sit in the most unsatisfied checks until H r = 0 (success)
+or 50 iterations have passed (detected failure).
+
 ## 5. Noise models
 
 All randomness goes through the seeded RNG in `include/rng.h`, so runs are reproducible.
@@ -105,6 +112,7 @@ profiles are listed in section 2. **They are modelling assumptions.**
 | E4 | Multi-seed (20 seeds 42..61), mean +- 95% CI (Student t), paired differences | `make bench` | `bench_strategy_seeds*.csv` |
 | E5 | All-RS ladder (new, pre-registered) | `make bench` | `bench_ladder_rs_seeds*.csv` |
 | E6 | Failure injection and header corruption | `make test`, `sh tools/header_experiment.sh 2000` | `tests/test_failure.sh`, `header_corruption.csv` |
+| E7 | LDPC(256,128) bit flipping vs BCH(15,7)/BCH(31,16)/RS t=4/RS t=8, both profiles (optional stretch) | `make bench` | `bench_ldpc.csv`, `bench_ldpc_hospital.csv` |
 
 Setup for E2-E5: schedule `toll:2000,hospital:2000,toll:2000` (counted in transmissions), 5000 frames,
 RTT 20 ms, timeout 100 ms, max 4 retries, simulated bit rate 160 kbit/s (assumed, decision #18).
@@ -226,6 +234,34 @@ makes the vehicle give up after max retries.
 At P = 0.2 with HARQ the tollgate reports 2003 CORRECT of 2000 frames sent: a flipped seq creates a phantom frame the
 tollgate cannot recognise. Not fixed (needs a wire-format change; proposed fix: a CRC-16 over the header).
 
+### 7.6 Optional stretch: LDPC(256,128) with Gallager bit flipping (E7, overnight C)
+
+(3,6)-regular H (128 x 256) built from a seeded RNG with a PEG-style rule (no 4-cycles; girth 6),
+systematic encoder from Gaussian elimination, hard-decision bit flipping (flip every bit that
+violates the most checks, max 50 iterations, failure if the syndrome is not zero). Unit tests:
+every codeword has zero syndrome, every 1- and 2-bit error is corrected (exhaustive), a success is
+never a non-codeword. Benchmark: `bin/bench --compare-codes bch157,bch3116,rs,rs_t8,ldpc`, seed 42,
+5000 frames per point (`results/bench_ldpc.csv`, `results/bench_ldpc_hospital.csv`). RS t=8 is
+included because it has the same rate (0.500) as the LDPC code.
+
+| code | rate | BSC 0.01 | BSC 0.02 | BSC 0.03 | toll GE | hospital GE | burst L=16 | burst L=24 | mean decode |
+|---|---|---|---|---|---|---|---|---|---|
+| BCH(31,16) | 0.5161 | 0.9986 | 0.9750 | 0.9032 | 0.9596 | 0.4936 | 0.0126 | 0.0008 | 6.9 us |
+| RS t=4 | 0.6667 | 0.9634 | 0.7218 | 0.3854 | 0.9756 | 0.8336 | 1.0000 | 1.0000 | 3.3 us |
+| RS t=8 | 0.5000 | 0.9996 | 0.9608 | 0.7568 | 0.9996 | 0.9532 | 1.0000 | 1.0000 | 5.6 us |
+| LDPC(256,128) | 0.5000 | 0.9994 | 0.9874 | 0.9152 | 0.9988 | 0.7902 | 0.9690 | 0.6916 | 10.5 us |
+
+(GE p_gb = 0.005; mean decode = mean of mean_decode_us over all sweep points of `bench_ldpc.csv`,
+timing of this host.) LDPC is the best code for random errors between p = 0.015 and 0.03 and
+ties RS t=8 below that, but it is **worse than both RS codes on the bursty hospital channel and on
+bursts of 16+ bits**, and its decode time is the highest on average because undecodable frames run
+all 50 iterations (25-50 us per frame at BSC p >= 0.05). SILENT_WRONG: 0 of 155,000 frames per
+profile. It is not on the adaptive ladder. Single seed; not tuned after seeing results.
+
+![LDPC vs BCH/RS, BSC](../results/success_vs_p_bsc_ldpc.png)
+![LDPC vs BCH/RS, hospital GE](../results/success_vs_pgb_ge_ldpc_hospital.png)
+![LDPC vs BCH/RS, bursts](../results/success_vs_burst_len_ldpc.png)
+
 ## 8. Limitations (honest)
 
 * **Adaptive does not clearly beat fixed HARQ + RS t=4.** On our channel the best fixed strategy has
@@ -252,7 +288,7 @@ tollgate cannot recognise. Not fixed (needs a wire-format change; proposed fix: 
 
 * Header CRC-16 (fixes the misrouting) and a header-corruption-resistant seq.
 * Soft-combining HARQ (type II), real-measured channel traces, real RTT.
-* LDPC with a bit-flipping decoder (optional stretch, not done).
+* LDPC: a soft-decision (sum-product) decoder and a longer code (the bit-flipping LDPC(256,128) of section 7.6 loses to RS on bursts).
 * Controller that can choose "fixed RS t=4" when that is best (e.g. bandit over fixed codes), and a ladder searched on a held-out channel (not tuned on the evaluation schedule).
 * Try the code on a real radio link or hardware-in-the-loop; run macOS/WSL CI.
 
@@ -260,9 +296,9 @@ tollgate cannot recognise. Not fixed (needs a wire-format change; proposed fix: 
 
 ```sh
 make                 # build bin/vehicle bin/channel bin/tollgate bin/bench
-make test            # 23 unit-test binaries + integration + failure-injection tests
+make test            # 24 unit-test binaries + integration + failure-injection tests
 make sanitize        # same under ASan + UBSan
-make bench           # E1-E5: writes results/*.csv (about 100 s; CSVs are git-ignored)
+make bench           # E1-E5, E7: writes results/*.csv (about 100 s; CSVs are git-ignored)
 pip install -r requirements.txt && make plots   # results/*.png (needs matplotlib)
 sh tools/header_experiment.sh 2000              # E6 header corruption -> results/header_corruption.csv
 make demo | make demo-hospital | make demo-adaptive | make compare | make dashboard
