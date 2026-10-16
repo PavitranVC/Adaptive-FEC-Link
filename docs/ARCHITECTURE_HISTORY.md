@@ -109,7 +109,7 @@ ASCII fallback:
 | BCH(31,16) | stronger random-error correction than Hamming | toll BSC p=0.01: 0.9986 vs Hamming(7,4) 0.9354 (`bench.csv`) |
 | Reed-Solomon (byte symbols) | bit-level codes collapse on hospital bursts | hospital GE p_gb=0.005: RS t=4 0.8336 vs BCH(31,16) 0.4936, Hamming(7,4) 0.4170 (`bench_hospital.csv`) |
 | bit interleaver (#11) | rescue Hamming/BCH against bursts | burst L=16: BCH(31,16) 0.0126 -> BCH(31,16)+il8 1.0000 (`bench.csv`) |
-| in-process benchmark | 155,000 frames per code and profile are too slow over UDP | 279 rows x 5000 frames in `bench.csv` |
+| in-process benchmark (`src/sim.c`) | sweep every code over 31 noise points x 5000 frames with exactly the pipeline's library code, same seed for every point | DECISIONS.md "Phase 5"; 279 rows x 5000 frames in `bench.csv` |
 
 ### 5. Wire format / interface changes
 
@@ -620,7 +620,7 @@ Counts computed with `git ls-tree` / `git show` at the last commit of each versi
 | unit-test binaries / test cases | 15 / 91 | 20 / 123 | 23 / 143 | 24 / 158 |
 | test scripts | `test_integration.sh` | same; `test_dashboard.py` referenced but missing | + `test_failure.sh`, `test_dashboard.py`, `make sanitize`, fuzz | same |
 | CI | none | none | none | GitHub Actions: ubuntu + macOS `make test`, ubuntu `make sanitize` |
-| `make bench` CSV files | 2 | 4 | 13 | 15 |
+| `make bench` CSV files (incl. `_raw` / `_diff`) | 2 | 4 | 13 | 15 |
 | tracked plots (`results/*.png`) | 10 | 12 | 16 | 26 |
 | key limitation | bursts beyond a code's design lose frames; no retransmission | adaptive never compared with "always strongest code" | header unprotected (misrouting); adaptive below fixed HARQ + RS t=4 | LDPC loses on bursts; no hardware; header still unprotected |
 
@@ -636,7 +636,7 @@ Counts computed with `git ls-tree` / `git show` at the last commit of each versi
 | v0.3 | goodput, 20 seeds, mean +- 95% CI | adaptive 0.5043 +- 0.0025, HARQ RS t=8 0.4910 +- 0.0005, HARQ RS t=4 0.6126 +- 0.0012 | `bench_strategy_seeds.csv` |
 | v0.3 | paired difference adaptive - HARQ RS t=4, 20 seeds | goodput -0.1083 +- 0.0030; retx -0.0194 +- 0.0025; p99 -8.74 +- 5.06 ms | `bench_strategy_seeds_diff.csv` |
 | v0.3 | all-RS ladder, 20 seeds | goodput 0.5841 +- 0.0040, success 0.99999; paired vs HARQ RS t=4: -0.0284 +- 0.0038 | `bench_ladder_rs_seeds*.csv` |
-| v0.3 | RTT sensitivity, p99 at 5 / 20 / 50 ms | ARQ 26.509 / 94.009 / 229.009 ms; adaptive 10.712 / 33.212 / 78.212 ms | `bench_rtt_*.csv` (values as in REPORT 7.3) |
+| v0.3 | RTT sensitivity, p99 at 5 / 20 / 50 ms | ARQ 26.509 / 94.009 / 229.009 ms; adaptive 10.712 / 33.212 / 78.212 ms | `bench_rtt_*.csv` (as in REPORT 7.3; the regenerated CSV differs by 0.001 ms, timing noise) |
 | v0.3 | header corruption, HARQ, P=0.2 | tollgate claims 2003 CORRECT of 2000 sent | `header_corruption.csv` (via DECISIONS.md #1; not regenerated for this document) |
 | v0.4 | LDPC(256,128) vs RS t=8 (same rate) | BSC p=0.02: 0.9874 vs 0.9608; hospital GE: 0.7902 vs 0.9532; burst L=24: 0.6916 vs 1.0000 | `bench_ldpc.csv`, `bench_ldpc_hospital.csv` |
 

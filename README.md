@@ -129,3 +129,5 @@ Demos: `make demo-arq`, `make demo-harq`, `make demo-adaptive`, `make dashboard`
 
 See `CLAUDE.md` for the folder layout and coding rules, `PLAN.md` for the roadmap,
 `PROGRESS.md` for the current state and `DECISIONS.md` for design decisions.
+**Architecture history** (how the design changed per version, why, and what failed):
+[`docs/ARCHITECTURE_HISTORY.md`](docs/ARCHITECTURE_HISTORY.md).

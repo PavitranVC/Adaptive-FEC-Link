@@ -3,6 +3,8 @@
 This is the single guide for setting up, running and presenting the project.
 Sections 0.x are one-time setup; sections 1-5 are the demos; then troubleshooting and a
 2-minute talking script.
+For how the architecture changed between versions and what failed, see the
+[Architecture history](ARCHITECTURE_HISTORY.md).
 
 ## 0.1 One-time setup (per laptop)
 
