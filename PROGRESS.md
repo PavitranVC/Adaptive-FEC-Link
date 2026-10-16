@@ -197,3 +197,14 @@ bursts" (REPORT 7.6). The list below is the older list from runs A/B (Gate A/B a
 25. Decoder = parallel Gallager bit flipping, hard decision, max 50 iterations (not tuned).
 26. LDPC is benchmarked in a separate `--compare-codes` sweep (default sweep unchanged); RS t=8 added
     to that comparison as the same-rate baseline.
+
+## Docs/demo polish (`docs-fix`)
+
+Changes after a real WSL run of docs/DEMO.md: WSL note and the real last line of `make test`; talking
+script rewritten (228 spoken words, all numbers from results/bench_strategy.csv, bench_hospital.csv,
+`make compare`; ARQ/HARQ row now shows `strategy_comparison.png` instead of the 20-frame demos);
+`SHOWBITS` variable (`tools/demo.sh` env + Makefile, default 1; `make demo-arq`/`demo-harq` default 0) with an
+integration check; `make demo-harq` now uses `--profile hospital` so retransmissions are visible
+(seed 42: 42 retransmissions, 4 frames given up with Hamming(7,4)); DEMO.md section 5 lists the real `make bench`
+outputs and the ~26 plots; dashboard section states 120 ms/frame (~36 s + 3 s) and `/api/state`; plot.py
+mentions the venv. Open: none. Not verified here: the venv message was only checked without matplotlib installed.

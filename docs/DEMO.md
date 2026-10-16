@@ -6,7 +6,9 @@ Sections 0.x are one-time setup; sections 1-5 are the demos; then troubleshootin
 
 ## 0.1 One-time setup (per laptop)
 
-**Windows (via WSL)** - in an *administrator* PowerShell:
+**Windows (via WSL)** - everything in this guide (`make`, `gcc`, `python3`, the demos) runs inside
+the **Ubuntu (WSL) terminal**, never in native PowerShell or cmd, which have no gcc/make/python.
+PowerShell is only used for the one-time install below, in an *administrator* PowerShell:
 
 ```powershell
 wsl --install
@@ -42,7 +44,8 @@ cd Adaptive-FEC-Link          # main is the default branch
 
 ```sh
 make            # builds bin/vehicle bin/channel bin/tollgate bin/bench (a few seconds)
-make test       # unit tests + integration test; ends with "Integration test passed."
+make test       # unit tests + integration tests; "Integration test passed." appears part-way
+                # through the output, the very last line is "dashboard tests passed"
 ```
 
 ## 0.4 Python environment (only for plots and the dashboard)
@@ -108,11 +111,17 @@ sh tools/demo.sh --profile hospital --code bch3116 --interleave 8 --count 20 --d
 
 ```sh
 make demo-arq                  # Stop-and-Wait ARQ: uncoded + CRC-32, retransmit on NAK/timeout
-make demo-harq                 # Hybrid ARQ: Hamming(7,4) first, retransmit only if the CRC fails
+make demo-harq                 # Hybrid ARQ on the HOSPITAL profile (bursts, so retransmissions show):
+                               #   Hamming(7,4) first, retransmit only if the CRC fails
 make demo-harq CODE=bch157
+make demo-arq SHOWBITS=1       # these two print no per-frame bit maps by default; SHOWBITS=1 adds them
 # failure injection: the tollgate drops 30% of its ACK/NAKs -> vehicle timeouts, no lost frames
 sh tools/demo.sh --strategy harq --code hamming74 --fb-drop 0.3 --count 20 --delay-ms 250
 ```
+
+(`SHOWBITS=0` also works for `make demo` / `make demo-hospital`; `tools/demo.sh` reads the
+`SHOWBITS` environment variable, default 1.) The live demos use only 20 frames, so their
+numbers differ from the 5000-frame benchmark in `results/bench_strategy.csv`: quote the benchmark.
 
 The vehicle prints `NAK`, `timeout`, `retransmission #k` and `ACK after n transmission(s)`;
 the tollgate prints `-> ACK/NAK` after each frame and `seq=5#1` for retransmission 1 of seq 5.
@@ -152,6 +161,7 @@ L2 BCH(15,7), L3 BCH(31,16), L4 RS t=4, L5 RS t=8. HARQ retransmits on CRC failu
 
 ```sh
 make dashboard                 # prints: open http://127.0.0.1:8050/  then runs the adaptive demo
+                               # at 120 ms/frame: ~36 s of demo after a 3 s start
 PORT=8080 make dashboard       # other port
 ```
 
@@ -162,6 +172,9 @@ counters (CORRECT / DETECTED_FAIL / SILENT_WRONG, retransmissions, decode latenc
 transmissions (bits flipped vs bits corrected, failed frames marked), and the code level over time
 on top of the channel profile. The page follows the OS light/dark setting and refreshes twice a
 second. After the demo the dashboard keeps showing the final state until Ctrl-C.
+The page reads its data from `http://127.0.0.1:8050/api/state` (JSON). The dashboard is deliberately
+slow (120 ms/frame) so people can watch it; `make demo-adaptive` runs the same scenario in the
+terminal in ~14 s (40 ms/frame) and is the faster alternative when time is short.
 Any run can feed it: `./bin/tollgate ... --jsonl FILE` + `python3 tools/dashboard.py --log FILE`.
 
 ## 2. Three-terminal demo (shows that they really are separate processes)
@@ -211,13 +224,27 @@ Same seed means the same sequence of tag IDs and the same noise process for ever
 ## 5. Benchmark and plots
 
 ```sh
-make bench                      # results/bench.csv (+ bench_hospital.csv, bench_strategy.csv)
-./bin/bench --strategies --schedule toll:2000,hospital:2000,toll:2000 --frames 5000 \
-    --trace results/adaptive_trace.csv --out results/bench_strategy.csv  # fec/arq/harq/adaptive
-pip install -r requirements.txt
-make plots                      # results/*.png incl. strategy_comparison.png, adaptive_level.png,
-                                #   goodput_vs_success.png, rtt_sensitivity.png
+make bench                      # ~2 min; writes the CSVs below (all git-ignored, plots are tracked)
+pip install -r requirements.txt # inside the venv (section 0.4)
+make plots                      # CSVs -> results/*.png
 ```
+
+`make bench` (see the `bench:` rule in the Makefile; `FRAMES=5000 SEED=42 SEEDS=20`) writes:
+
+| file | content |
+|---|---|
+| `results/bench.csv`, `bench_hospital.csv` | every code vs BSC / Gilbert-Elliott / burst sweeps, toll and hospital |
+| `results/bench_ldpc.csv`, `bench_ldpc_hospital.csv` | BCH, RS and LDPC compared |
+| `results/bench_strategy.csv`, `adaptive_trace.csv` | fec / arq / harq / adaptive on toll, hospital and the toll-hospital-toll schedule; level over time |
+| `results/bench_rtt_5.csv`, `_20.csv`, `_50.csv` | the same strategy bench at 5 / 20 / 50 ms round trip |
+| `results/bench_strategy_seeds.csv` (+ `_raw`, `_diff`) | 20 seeds, mean and 95% CI, paired differences |
+| `results/bench_ladder_rs_seeds.csv` (+ `_raw`, `_diff`) | same for the all-Reed-Solomon ladder |
+
+`make plots` turns these into about 26 PNGs in `results/` (already committed, so you can show them
+without running anything): per CSV set (`bench`, `_hospital`, `_ldpc`, `_ldpc_hospital`)
+`success_vs_p_bsc`, `success_vs_pgb_ge`, `success_vs_burst_len`, `silent_wrong`, `latency`; plus
+`strategy_comparison`, `goodput_vs_success`, `goodput_vs_success_ci`, `adaptive_level`,
+`rtt_sensitivity` and `ladder_rs_experiment`.
 
 ## 6. Troubleshooting
 
@@ -233,16 +260,19 @@ make plots                      # results/*.png incl. strategy_comparison.png, a
 
 ## 7. Two-minute talking script
 
-Each line: what to say, and what to run or show while saying it. Numbers come from
-`results/bench.csv`, `results/bench_hospital.csv` and `results/bench_strategy.csv` (`make bench`).
+Each line: what to say, and what to run or show while saying it. About 230 spoken words (228 counted), roughly
+2 minutes at 130 words per minute. Every number comes from `results/bench.csv`,
+`results/bench_hospital.csv` or `results/bench_strategy.csv` (`make bench`), or from
+`make compare` (seed 42, 1000 frames). The 20-frame live demos show different numbers than the
+5000-frame benchmark, so the retransmission row uses the plot instead of a live demo.
 
 | # | say | run / show |
 |---|---|---|
-| 1 | "A car's RFID tag ID must reach the toll gantry in one pass. Near trucks - or near MRI and electrosurgery equipment in a hospital - the radio link gets bursts of bit errors. Retransmitting costs time the car does not have, so we correct errors in place." | README architecture diagram |
-| 2 | "Hamming(7,4) fixes any single error per block, but two errors in a block make it 'correct' the wrong bit - silently." | `make demo` - point at a magenta `M` in the bit map, if one shows up |
-| 3 | "That is why every ID carries a CRC-32: a mis-corrected frame is always rejected. In about 155,000 test frames per code, SILENT_WRONG never happened once." | `results/silent_wrong.png` |
+| 1 | "A car's RFID tag ID must reach the toll gantry in one pass. Near trucks, or near MRI and surgical equipment, the radio link gets bursts of bit errors. Retransmitting costs time the car does not have, so we correct errors in place." | README architecture diagram |
+| 2 | "Hamming(7,4) fixes one error per block. With two errors in a block it fixes the wrong bit, silently." | `make demo-hospital` - point at a magenta `M` in the bit map (seed 42 shows several; the toll demo has none) |
+| 3 | "So every ID carries a CRC-32. Across 310,000 test frames per code, a wrong ID was never accepted." | `results/silent_wrong.png` |
 | 4 | "BCH codes fix several errors per block. Same seed, same noise: Hamming 93.1% correct, BCH(15,7) 99.2%." | `make compare` |
-| 5 | "In the hospital profile errors come in bursts. Reed-Solomon works on bytes, so a 16-bit burst touches at most 3 bytes - a few symbol errors it fixes easily. RS(24,16) gets 83% on the hospital channel with no interleaver at code rate 0.67; Hamming+interleaver gets 61%, BCH(31,16)+interleaver ties RS at 84% but needs more parity (rate 0.52) - and for very long 32-bit bursts the interleaved BCH is actually better." | `make demo-hospital CODE=rs`, `results/success_vs_burst_len_hospital.png` |
-| 6 | "Classic retransmission (ARQ) needs 1.8 extra transmissions per frame and a 94 ms worst case; FEC plus retransmit-on-failure (HARQ) cuts both." | `make demo-arq`, then `make demo-harq`; `results/strategy_comparison.png` |
-| 7 | "Our adaptive controller watches the receiver's error statistics and climbs the code ladder when the hospital interference starts, then steps back down when it ends." | `make demo-adaptive` (point at `LEVEL UP` / `LEVEL DOWN`), or `make dashboard` |
-| 8 | "Is adaptation worth it? Honestly: only partly. On the toll -> hospital -> toll channel adaptive delivers 99.94% of IDs with a 33 ms worst case, like always using the strongest code (RS t=8, 100%), but it saves only 3% of the transmitted bits (goodput 0.505 vs 0.490). Plain HARQ with RS t=4 does best here: 100% at goodput 0.61. The lesson: an adaptive ladder only pays off if its lower rungs really have higher code rates - ours (Hamming, BCH) do not." | `results/goodput_vs_success.png`, `results/adaptive_level.png` |
+| 5 | "In the hospital, errors come in bursts. Reed-Solomon works on bytes, so a burst damages only a few symbols. At code rate 0.67 it delivers 83% with no interleaver; Hamming with an interleaver manages 61%." | `results/success_vs_burst_len_hospital.png` |
+| 6 | "Plain retransmission, ARQ, needs 1.78 extra transmissions per frame, a 94 ms worst case, and still delivers only 82%. HARQ with Reed-Solomon: 0.09 retransmissions, 32 ms, 100%." | `results/strategy_comparison.png` (5000 frames; do not run the 20-frame demos here) |
+| 7 | "Our adaptive controller climbs the code ladder when hospital interference starts, and steps back down when it ends." | `make demo-adaptive` (~14 s; point at `LEVEL UP` / `LEVEL DOWN`), or `make dashboard` |
+| 8 | "Is it worth it? Only partly. Adaptive delivers 99.94% of IDs with a 33 ms worst case; goodput 0.505 against 0.490 for always using the strongest code. Plain HARQ with Reed-Solomon t=4 does best: 100% at goodput 0.61. Adaptation only pays if the lower rungs have higher code rates, and ours do not." | `results/goodput_vs_success.png`, `results/adaptive_level.png` |

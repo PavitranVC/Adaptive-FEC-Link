@@ -28,7 +28,8 @@ try:
     import matplotlib.pyplot as plt
     import matplotlib.ticker
 except ImportError:
-    sys.exit("matplotlib is missing: pip install -r requirements.txt")
+    sys.exit("matplotlib is missing: activate the venv first (source .venv/bin/activate), "
+             "then pip install -r requirements.txt")
 
 # Fixed colour per code (identity follows the code, never its rank) - validated categorical
 # palette, light mode, in slot order.
