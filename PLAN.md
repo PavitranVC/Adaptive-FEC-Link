@@ -35,7 +35,7 @@ outputs -> commit `phaseN: <summary>` -> push.
 - [x] Live Python web dashboard (tollgate --jsonl + tools/dashboard.py, `make dashboard`).
 - [x] Deliberate failure-injection testing (malformed packets, lost END, port in use, bursts
       longer than the code can handle, header corruption experiment).
-- [ ] Final report plots (both profiles, all codes, ARQ vs FEC vs HARQ vs adaptive).
+- [x] Final report plots (both profiles, all codes, ARQ vs FEC vs HARQ vs adaptive).
 - [ ] *Optional stretch*: LDPC with a bit-flipping decoder.
 
 ## Overnight A (branch `overnight-a`)
@@ -45,3 +45,9 @@ outputs -> commit `phaseN: <summary>` -> push.
 - [x] Task 2: `make sanitize` (ASan + UBSan, all tests) + seeded fuzz test of the parsers.
 - [x] Task 3: `bench --strategies --seeds N` (mean + 95% CI), paired differences, CI plot.
 - [x] Task 4: all-RS ladder experiment (`--ladder rs`), pre-registered, reported.
+
+## Overnight B (branch `overnight-b`)
+
+- [x] Task 5: GitHub Actions CI (`.github/workflows/ci.yml`) - workflow added, not yet run.
+- [x] Task 6: `docs/REPORT.md` draft (numbers from results/*.csv, PROGRESS, DECISIONS).
+- [ ] Next (Run C/D): optional LDPC, tag, local test and rehearsal.
