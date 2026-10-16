@@ -307,3 +307,158 @@ ASCII fallback:
 - The comparison baselines did not yet include "always use the strongest code" with HARQ.
 
 ---
+
+## v0.3 - Final polish + overnight A: fair baselines, statistics, failure injection
+
+### 1. Summary
+
+No new process; the architecture was *hardened and measured*. A goodput metric and the
+"always strongest code" baselines (HARQ + RS t=4 / t=8) showed that the adaptive controller's main
+claim did not hold. The channel gained header-corruption injection, the build gained ASan/UBSan and
+a fuzz test, the benchmark gained 20-seed statistics with confidence intervals, and the controller
+gained a second, pre-registered ladder (`--ladder rs`). Git range `a6c204e`..`754e3e9`
+(polish `a6c204e`, `e00eef7`, `c4d7bf4`; overnight A `892bd77`, `550ca0d`, `dd89f72`, `af91465`,
+`955da8c`, `ac2adbb`, `b409980`, `bde2409`; gate A `754e3e9`).
+
+### 2. Architecture diagram
+
+```mermaid
+flowchart LR
+    V["bin/vehicle<br/>sender + adapt<br/>--ladder mixed or rs (new)"] -- "UDP 9000" --> C["bin/channel<br/>noise + sidecar<br/>--corrupt-header P (new)"]
+    C -- "UDP 9001" --> T["bin/tollgate<br/>receiver: validate before seq bookkeeping (changed)"]
+    T -. "UDP 9002 ACK/NAK + window stats" .-> V
+    I["tests/inject.c (new)<br/>malformed packets"] -- "bad datagrams" --> T
+    I -- "bad datagrams" --> C
+    B["bin/bench --strategies --seeds N (new)"] --> ST["stats: mean + 95% CI, Student t (new)"]
+    B --> L["linksim"]
+    B -- "CSV" --> R["bench_strategy_seeds*.csv (new)<br/>bench_ladder_rs_seeds*.csv (new)<br/>bench_rtt_5/20/50.csv (new)"]
+    H["tools/header_experiment.sh (new)"] --> HC["header_corruption.csv (new)"]
+    S["make sanitize (new)<br/>ASan + UBSan, all tests"] -.-> B
+    F["tests/test_fuzz.c (new)<br/>450k parser inputs"] -.-> T
+```
+
+ASCII fallback:
+
+```
+ bin/vehicle --UDP 9000--> bin/channel ----------------UDP 9001--> bin/tollgate
+  sender + adapt            noise + sidecar                         receiver: validate packet
+  --ladder mixed|rs (new)   --corrupt-header P (new):               BEFORE seq bookkeeping (changed)
+                            1-4 header bit flips, END exempt        empty datagram = malformed (changed)
+      ^                                                                  |
+      +-------------------- UDP 9002 ACK/NAK + window stats -------------+
+
+ tests/inject.c (new) ----- malformed / truncated / duplicate datagrams --> channel, tollgate
+ tests/test_fuzz.c (new) -- 200k packet_parse + 200k feedback_parse + 50k --schedule inputs
+ make sanitize (new) ------ every unit + integration test under ASan + UBSan (build/asan)
+ bin/bench --strategies --seeds 20 (new) --> stats.c (new, Student t) --> *_seeds*.csv
+ bin/bench --rtt-ms 5/20/50 ----------------------------------------------> bench_rtt_*.csv
+ tools/header_experiment.sh (new) ----------------------------------------> header_corruption.csv
+```
+
+### 3. What changed
+
+| component | change | files / modules | commit |
+|---|---|---|---|
+| docs | DEMO.md becomes the single demo guide | `docs/DEMO.md`, `README.md` | `a6c204e` |
+| evaluation | goodput metric; baselines HARQ + RS t=4 / t=8 and FEC RS t=8 | `src/linksim.c`, `tools/bench.c`, `tools/plot.py` | `e00eef7` |
+| evaluation | RTT sensitivity 5 / 20 / 50 ms | `Makefile`, `tools/plot.py` | `c4d7bf4` |
+| tests | restore hidden `tests/test_dashboard.py`, `.gitignore` exception | `.gitignore`, `tests/test_dashboard.py` | `892bd77` |
+| channel | `--corrupt-header P` (separate RNG stream) | `src/packet.c`, `src/apps/channel.c` | `550ca0d` |
+| tollgate / net | empty datagram, seq stealing and `SO_REUSEADDR` bugs fixed | `src/netutil.c`, `src/apps/tollgate.c` | `550ca0d` |
+| tests | failure injection | `tests/inject.c`, `tests/test_packet.c`, `tests/test_failure.sh`, `tools/header_experiment.sh` | `550ca0d` |
+| build | `make sanitize` (ASan + UBSan), seeded fuzz test | `Makefile`, `tests/test_fuzz.c` | `dd89f72` |
+| RS decoder | output the received bytes on failure (was uninitialized) | `src/rs.c`, `tests/test_rs.c` | `dd89f72` |
+| statistics | `--seeds N`, mean +- 95% CI (Student t), paired differences | `src/stats.c`, `tests/test_stats.c`, `tools/bench.c` | `af91465` |
+| controller | pre-registration, then `--ladder {mixed,rs}`, then the result | `DECISIONS.md`; `src/adapt.c`; `tools/bench.c` | `955da8c`, `ac2adbb`, `b409980` |
+| docs | PROGRESS, gate A number corrections | `PROGRESS.md`, `DECISIONS.md` | `bde2409`, `754e3e9` |
+
+### 4. Why
+
+| change | problem it solved / question it answered | evidence |
+|---|---|---|
+| goodput + HARQ RS t=4/t=8 baselines | "is adaptive better than always using the strongest code?" was never measured | single seed: adaptive 0.505, HARQ RS t=8 0.490, HARQ RS t=4 0.612 (DECISIONS.md "Final polish"; `bench_strategy.csv` regenerated: 0.5047 / 0.4903 / 0.6121) |
+| RTT sensitivity | RTT 20 ms is an assumption (#18) | p99 ARQ 26.509 -> 94.009 -> 229.009 ms, adaptive 10.712 -> 33.212 -> 78.212 ms; rankings unchanged (REPORT 7.3, `bench_rtt_*.csv`) |
+| failure injection | the header is never corrupted (#1) - what if it is? | FEC, P=0.01: 23 of 24 corrupted headers cost a frame; HARQ, P=0.2: tollgate claims 2003 CORRECT of 2000 sent (DECISIONS.md #1) |
+| sanitizers + fuzzing | C code with hand-made parsers and decoders | 1 real bug (RS), 0 parser bugs in 450k inputs (DECISIONS.md "task 2") |
+| 20 seeds + paired CIs (#22) | single-seed differences of a few frames are noise | HARQ RS t=4 p99 is 32.4 ms in 11 seeds and >= 40 ms (53.6 ms) in 9 (`bench_strategy_seeds_raw.csv`, counted for this document) |
+| all-RS ladder (#23) | was the *ladder*, not the controller, the reason adaptive lost? | goodput 0.584 +- 0.004 vs 0.504 mixed, paired +0.0799 +- 0.0050 (`bench_ladder_rs_seeds*.csv`) |
+
+### 5. Wire format / interface changes
+
+| item | v0.2 | v0.3 |
+|---|---|---|
+| packet / feedback format | header v2, feedback 22 bytes | unchanged |
+| receive validation | seq bookkeeping before validation; 0-byte datagram = idle timeout | **validate first**; 0-byte datagram = malformed (`NET_EMPTY`) |
+| UDP bind | `SO_REUSEADDR` | removed: second instance exits with `Address already in use` (exit 1) |
+| new CLI flags | - | `--corrupt-header P` (channel), `--seeds N` (bench), `--ladder {mixed,rs}` (vehicle/tollgate/bench) |
+| new make targets | - | `sanitize`; `make bench` now also writes RTT, 20-seed and all-RS CSVs |
+| new scripts | - | `tools/header_experiment.sh`, `tests/test_failure.sh` |
+| plots | 12 PNGs | 16 PNGs (+ `goodput_vs_success`, `rtt_sensitivity`, `goodput_vs_success_ci`, `ladder_rs_experiment`) |
+
+### 6. Test and verification
+
+| test | what it checks | result |
+|---|---|---|
+| 23 unit-test binaries, 143 test cases (`tests/test_*.c` at `754e3e9`) | new: `test_packet` (malformed / truncated / header corruption), `test_fuzz` (450k inputs), `test_stats` (CI maths) | pass, gcc 13 and clang (PROGRESS.md) |
+| `tests/test_integration.sh` | + adaptive with `--ladder rs`, `--seeds` smoke test | pass (PROGRESS.md) |
+| `tests/test_failure.sh` (new, ports 19200-19202) | garbage, empty, truncated, duplicate, lost END, port in use, L=4096 bursts, 100% feedback loss | pass (PROGRESS.md) |
+| `tests/test_dashboard.py` | now in git | pass (PROGRESS.md) |
+| `make sanitize` (gcc) | all of the above under ASan + UBSan | no findings after the RS fix (PROGRESS.md) |
+| `make sanitize CC=clang` | same with clang | **not run**: clang ASan runtime missing in the container (DECISIONS.md) |
+
+### 7. What failed / what we got wrong
+
+1. **The adaptive controller's main claim did not hold.** Expected: "adaptive reaches the
+   strongest code's reliability at clearly lower overhead". Actual (schedule channel, seed 42,
+   `e00eef7`): adaptive 99.94% / goodput 0.505, HARQ + RS t=8 100% / 0.490 (only ~3% more
+   overhead), HARQ + RS t=4 100% / **0.612**. Root cause: the ladder is ordered by burst
+   robustness, not by code rate; its lower rungs (Hamming 0.571, BCH 0.449 / 0.516) cost *more*
+   parity than RS t=4 (0.667), so stepping down saves nothing. Handled: reported honestly in
+   README, DECISIONS.md and PROGRESS.md; an all-RS ladder was tested later (item 7).
+2. **The single-seed conclusion "RS t=4 beats adaptive on every metric" was wrong.** Corrected by
+   the 20-seed run (`af91465`): HARQ + RS t=4 wins goodput (0.613 vs 0.504, paired -0.1083 +- 0.0030)
+   and success (99.998% vs 99.95%), but adaptive has fewer retransmissions (0.069 vs 0.088 per
+   frame) and a lower p99 (33.2 ms vs 42 +- 5 ms). Root cause: seed 42 was lucky for RS t=4
+   (p99 32.4 ms; 9 of 20 seeds give 53.6 ms), and retransmissions were already lower for adaptive
+   in the single-seed run (0.076 vs 0.089). Handled: README table switched to 20-seed means.
+3. **Failure injection found 3 real bugs** (`550ca0d`, DECISIONS.md "Overnight A - task 1"):
+   (a) a 0-byte datagram was read as "idle timeout" and **stopped** the tollgate/channel;
+   (b) an invalid packet **stole the seq** of a later valid one, which was then dropped as a
+   duplicate and counted as DETECTED_FAIL; (c) `SO_REUSEADDR` let a **second process bind the same
+   UDP port** and silently share packets. All fixed and tested. A fourth bug was in the test
+   script itself: `check "x" [ a ] && [ b ]` only checked `a`; fixed with `eval`.
+4. **Sanitizers found 1 real bug** (`dd89f72`): `rs_decode` returned -1 without writing `data`, so
+   failed RS frames logged uninitialized bytes as `tag_rx` / `crc_ok` (classification unaffected).
+   Found because `tests/test_receiver.c` (decode twice, compare) failed only in the ASan build.
+   Fixed; test `failure_outputs_received_data_bytes`.
+5. **Header corruption causes misrouting the tollgate cannot see** (open). With HARQ at P = 0.2 the
+   tollgate reports **2003 CORRECT of 2000 frames sent**; with plain FEC at P = 0.05, 96 of 100
+   corrupted headers cost a frame (4.8% of all frames). Root cause: no header checksum; a flipped
+   seq bit files a frame under another seq. **Left open**: the fix (header CRC-16) changes the
+   wire format.
+6. **Two DECISIONS.md numbers were wrong** and were corrected by gate A (`754e3e9`): HARQ frames
+   "lost or misrouted" at P = 0.01 / 0.05 were written as 0.15% / 0.6% but are **0.1% / 0.5%**
+   (the old numbers included the "failed" column); the p99 difference vs HARQ RS t=8 was written as
+   "+0.002 ms" and became "+0.001-0.002 ms (real decode-time jitter, differs per run)".
+   No README number was changed by gate A.
+7. **The all-RS ladder held its pre-registered hypothesis but still lost to a fixed code.**
+   Criterion met (goodput 0.584 +- 0.004 vs 0.504 mixed and 0.491 RS t=8; success 99.999%), but
+   vs fixed HARQ + RS t=4 the paired goodput difference is **-0.0284 +- 0.0038** on the schedule
+   channel and it only ties on toll alone (-0.0007 +- 0.0009). Reported as a new experiment;
+   default stays `--ladder mixed`.
+8. **The mixed adaptive ladder loses to "always RS t=8" on each single profile** (found in the
+   CSVs while writing this document, not stated in the other docs). Paired, 20 seeds
+   (`bench_strategy_seeds_diff.csv`): hospital only, goodput **-0.0033 +- 0.0007**; toll only, p99
+   **+21.2 ms**. Its +0.0133 goodput advantage exists only on the switching schedule channel.
+9. **Dashboard labels are wrong with `--ladder rs`** (level numbers right, axis names from the
+   mixed ladder). Left open (DECISIONS.md "task 4").
+
+### 8. Decisions still open / limitations
+
+- Header protection (CRC-16, new header version) - open problem in PROGRESS.md.
+- Default ladder for the demo: `mixed` (all docs use it) vs `rs` - team decision listed in PROGRESS.md.
+- p99 of HARQ codes is bimodal across seeds, so its t-interval is approximate (#22 caveat).
+- `make sanitize CC=clang` not run; macOS / WSL not run in this version.
+- No controller can choose "fixed RS t=4" when that is best (REPORT section 10, future work).
+
+---
