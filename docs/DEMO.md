@@ -198,6 +198,80 @@ Ports (UDP, 127.0.0.1): vehicle -> channel **9000**, channel -> tollgate **9001*
 tollgate -> vehicle **9002** (ACK/NAK feedback for `arq`, `harq` and `adaptive`). Change them with
 `--channel-port`, `--tollgate-port`, `--feedback-port` (give the same values to all three).
 
+### 2.1 Wireshark proof (the frames really cross the network)
+
+Capture the section 2 run to show that the three programs exchange UDP packets over the loopback
+interface, and that the channel changes bits between 9000 and 9001.
+
+Install (Ubuntu, Debian, WSL):
+
+```sh
+sudo apt install -y wireshark tshark
+```
+
+During the install, answer **Yes** to "Should non-superusers be able to capture packets?". To capture
+without `sudo`, add yourself to the group and log in again:
+
+```sh
+sudo usermod -aG wireshark $USER      # then log out and back in
+```
+
+**WSL2:** the Wireshark window needs WSLg (Windows 11). Without it, use the `tshark` commands below.
+
+**Start the capture before the demo** (packets sent earlier are not captured):
+
+GUI: open Wireshark, double-click `Loopback: lo` (on macOS: `lo0`), and enter this display filter:
+
+```
+udp.port == 9000 || udp.port == 9001 || udp.port == 9002
+```
+
+CLI: run this in a fourth terminal, then the three commands of section 2:
+
+```sh
+mkdir -p results/tmp
+sudo tshark -i lo -f "udp portrange 9000-9002" -w results/tmp/wire.pcap -a duration:30
+```
+
+When it has stopped (or after Ctrl-C), make the file readable and count the packets per port:
+
+```sh
+sudo chown $USER results/tmp/wire.pcap        # tshark run as root writes a root-only file
+tshark -r results/tmp/wire.pcap -T fields -e udp.dstport | sort | uniq -c
+```
+
+Expected counts: with the default `--strategy fec` the 9000 and 9001 counts are equal and there are
+no 9002 packets. With `--strategy arq`, `harq` or `adaptive` there is one 9002 packet per data packet
+on 9000, each an ACK or a NAK.
+
+What to look at:
+
+| port | what you see |
+|---|---|
+| 9000, vehicle -> channel | 16-byte header, then the coded bits. No sidecar. For `--code hamming74`: UDP length 52 |
+| 9001, channel -> tollgate | the same header, except byte 7 bit 0 is set. Coded bits with some bits flipped. The sidecar is appended: UDP length 96 |
+| 9002, tollgate -> vehicle | 22 bytes, starting with `FB`. Byte 3: `1` = ACK, `2` = NAK |
+
+Bits flipped by the channel show up as bytes that differ between the 9000 and 9001 packet of the same
+frame (same `seq` and `attempt`). Summed over a run, the differing bits equal the flip count the channel
+writes into the 9001 sidecar (2 bytes right after the coded bits). The sidecar is for evaluation only:
+the tollgate never reads it to decode.
+
+Packet layout, from `include/packet.h` and `src/feedback.c`:
+
+| offset | bytes | field |
+|---|---|---|
+| 0 | 2 | magic `FL` (feedback packets: `FB`) |
+| 3 | 1 | type: 1 = DATA, 2 = END (feedback: 1 = ACK, 2 = NAK) |
+| 7 | 1 | flags, bit 0 = sidecar present (9001 only) |
+| 8 | 4 | `seq`, big-endian (feedback: 4-7) |
+| 12 | 2 | `nbits`, number of coded bits, big-endian |
+| 14 | 1 | `attempt`: 0 = first transmission, 1.. = retransmission (feedback: byte 8) |
+| 15 | 1 | strategy: 0 fec, 1 arq, 2 harq, 3 adaptive |
+| 16 | B | coded bits, packed MSB first; the only part the channel corrupts |
+
+Feedback packets are 22 bytes; bytes 9 onwards carry the code level and the window statistics.
+
 ## 3. Side-by-side comparison
 
 ```sh
@@ -255,6 +329,8 @@ without running anything): per CSV set (`bench`, `_hospital`, `_ldpc`, `_ldpc_ho
 | `make: command not found` / `gcc: not found` / `cc: not found` | redo section 0.1 (`build-essential` on Ubuntu/WSL, `xcode-select --install` on macOS) |
 | `cannot bind UDP 127.0.0.1:9000: Address already in use` | an old run is still alive. List it: `pgrep -fl "bin/(vehicle|channel|tollgate)"`, stop it by PID: `kill <pid>` (only those PIDs - do not `kill -9` things you do not recognise). Or use other ports: add `--channel-port 9100 --tollgate-port 9101 --feedback-port 9102` to all three programs |
 | three-terminal demo: nothing arrives at the tollgate | start order matters: **tollgate first, then channel, then vehicle**; all three need the same port flags |
+| Wireshark / tshark shows no packets | the capture was started after the demo, or on the wrong interface: start the capture first and use `lo` (macOS: `lo0`) |
+| `permission denied` or no capture interfaces | run with `sudo`, or answer **Yes** at the install prompt and run `sudo usermod -aG wireshark $USER`, then log out and back in |
 | garbled characters like `^[[32m` | the terminal does not support colours: add `--no-color` (e.g. `sh tools/demo.sh --no-color ...`) |
 | `matplotlib is missing` from `make plots` | activate the venv (`source .venv/bin/activate`) and `pip install -r requirements.txt` |
 | dashboard: `Address already in use` on 8050 | `PORT=8080 make dashboard` (then open `http://127.0.0.1:8080/`) |
