@@ -14,11 +14,15 @@ void sim_run(const fec_config_t *cfg, const noise_params_t *np, long frames, uin
     uint8_t coded[FEC_MAX_CODED_BITS];
     rng_t tags;
     noise_t ch;
+    /* Rejects an invalid code configuration (unknown code, bad rs_t / interleave) and missing
+     * arguments: *out is zeroed (frames = 0) instead of encoding with a table entry that does not exist. */
+    if (!out) return;
+    memset(out, 0, sizeof *out);
+    if (!cfg || !np || !fec_config_valid(cfg)) return;
     /* Separate labelled sub-streams: the tag sequence and the noise do not depend on which
      * code is under test, so different codes are compared on identical inputs. */
     rng_seed(&tags, rng_derive(seed, "sim-tags"));
     noise_init(&ch, np, rng_derive(seed, "sim-noise"));
-    memset(out, 0, sizeof *out);
     out->code_rate = fec_code_rate(cfg, PAYLOAD_BITS);
     double total_us = 0.0;
 

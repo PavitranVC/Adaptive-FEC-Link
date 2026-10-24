@@ -88,7 +88,8 @@ static void scenario_malformed(void) {
     memcpy(bad, wire, len);                             /* unknown code id, length still valid */
     bad[4] = 99;
     send_raw(bad, len);
-    printf("garbage %d\nmalformed %d\ninvalid 1\n", garbage, malformed);
+    malformed++;                                        /* packet_parse rejects the header itself */
+    printf("garbage %d\nmalformed %d\ninvalid 0\n", garbage, malformed);
 
     send_raw(wire, len);                                /* seq 0 */
     send_raw(wire, len);                                /* exact duplicate of seq 0 */

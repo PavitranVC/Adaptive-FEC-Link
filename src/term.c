@@ -26,6 +26,8 @@ const char *term_c(term_color_t c) {
     static const char *const CODES[] = {
         "\033[0m", "\033[1m", "\033[2m", "\033[31m", "\033[32m", "\033[33m", "\033[34m",
         "\033[35m", "\033[36m", "\033[41;97m", "\033[42;30m", "\033[45;97m"};
+    /* Rejects an out-of-range colour (returns "") instead of reading past the table. */
+    if ((unsigned)c >= sizeof CODES / sizeof CODES[0]) return "";
     return g_color ? CODES[c] : "";
 }
 

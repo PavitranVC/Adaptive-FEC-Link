@@ -102,6 +102,28 @@ TEST(unknown_code_and_bad_parameters_rejected_by_receiver) {
     CHECK(rx_config(CODE_HAMMING74, 4, 1, 225, &cfg) != 0);   /* size mismatch */
 }
 
+/* packet_parse itself refuses a DATA header with an unknown code, bad rs_t / interleave or unknown strategy. */
+TEST(parse_rejects_invalid_code_parameters_and_strategy) {
+    static uint8_t wire[PACKET_MAX_BYTES];
+    static packet_t q;
+    size_t len = make_packet(wire, sizeof wire, 0);
+    CHECK(packet_parse(wire, len, &q) == 0);
+    uint8_t save[4] = {wire[4], wire[5], wire[6], wire[15]};
+    wire[4] = 99;                                    /* unknown code */
+    CHECK(packet_parse(wire, len, &q) != 0);
+    wire[4] = save[0];
+    wire[6] = 0;                                     /* interleave depth 0 */
+    CHECK(packet_parse(wire, len, &q) != 0);
+    wire[6] = save[2];
+    wire[15] = 4;                                    /* strategy past adaptive */
+    CHECK(packet_parse(wire, len, &q) != 0);
+    wire[15] = save[3];
+    wire[4] = CODE_RS; wire[5] = 0;                  /* RS with rs_t 0 */
+    CHECK(packet_parse(wire, len, &q) != 0);
+    wire[4] = save[0]; wire[5] = 200;                /* rs_t is ignored by hamming: still fine */
+    CHECK(packet_parse(wire, len, &q) == 0);
+}
+
 TEST(header_corruption_flips_only_header_bits) {
     static uint8_t wire[PACKET_MAX_BYTES], orig[PACKET_MAX_BYTES];
     size_t len = make_packet(wire, sizeof wire, 1);
@@ -189,6 +211,7 @@ int main(void) {
     RUN(bad_magic_version_type_rejected);
     RUN(absurd_nbits_rejected_without_overflow);
     RUN(unknown_code_and_bad_parameters_rejected_by_receiver);
+    RUN(parse_rejects_invalid_code_parameters_and_strategy);
     RUN(header_corruption_flips_only_header_bits);
     RUN(header_corruption_is_reproducible);
     RUN(every_single_header_bit_flip_is_safe);

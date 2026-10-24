@@ -46,10 +46,11 @@ size_t packet_serialize(const packet_t *p, uint8_t *buf, size_t cap) {
     return len;
 }
 
-/* The length must match exactly (no trailing bytes). Only flag bit0 is interpreted. code, rs_t,
- * interleave, strategy, attempt and the sidecar fields are copied as received, not validated:
- * the caller must check them (e.g. with fec_config_valid) before use. p is not modified when
- * -1 is returned; p->bits beyond nbits is left untouched. */
+/* The length must match exactly (no trailing bytes). Only flag bit0 is interpreted. For a DATA
+ * packet the code, rs_t, interleave and strategy must form a valid configuration (an END packet
+ * carries no code, so its fields are not checked). The coded size is not compared with the code
+ * here (rx_config does that); attempt and the sidecar fields are copied as received. p is not
+ * modified when -1 is returned; p->bits beyond nbits is left untouched. */
 int packet_parse(const uint8_t *buf, size_t len, packet_t *p) {
     if (len < PACKET_HEADER_BYTES) return -1;
     if (buf[0] != 'F' || buf[1] != 'L' || buf[2] != PACKET_VERSION) return -1;
@@ -57,6 +58,14 @@ int packet_parse(const uint8_t *buf, size_t len, packet_t *p) {
     uint16_t nbits = get16(buf + 12);
     int has_truth = buf[7] & 1;
     if (nbits > PACKET_MAX_BITS || len != expected_len(nbits, has_truth)) return -1;
+    /* Rejects an unknown code id, an invalid rs_t / interleave depth for that code and an unknown
+     * strategy in DATA packets, so no consumer can index a table with a wild header byte. */
+    if (buf[3] == PKT_DATA) {
+        fec_config_t cfg = fec_config((code_id_t)buf[4]);
+        cfg.rs_t = buf[5];
+        cfg.interleave = buf[6];
+        if (!fec_config_valid(&cfg) || buf[15] > 3) return -1;   /* 3 = adaptive, the last strategy */
+    }
     p->type = buf[3]; p->code = buf[4]; p->rs_t = buf[5]; p->interleave = buf[6];
     p->seq = get32(buf + 8);
     p->nbits = nbits;
