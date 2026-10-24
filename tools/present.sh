@@ -10,7 +10,7 @@ cleanup() {
     trap - EXIT INT TERM
     for g in "${PGS[@]}"; do kill -TERM -- "-$g" 2>/dev/null; done
     for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done
-    sudo pkill -INT -x tshark 2>/dev/null
+    sudo pkill -INT -x dumpcap 2>/dev/null
     pkill -f "bin/(vehicle|channel|tollgate)" 2>/dev/null
 }
 trap cleanup EXIT
@@ -38,7 +38,7 @@ result 1 $rc
 # 2. three processes + packet capture
 banner "2. Three-process demo with tshark capture"
 mkdir -p results/tmp; rm -f results/tmp/wire.pcap
-sudo tshark -i lo -f "udp portrange 9000-9002" -w /tmp/wire.$$.pcap >/dev/null 2>&1 & TP=$!
+sudo dumpcap -q -i lo -f "udp portrange 9000-9002" -w /tmp/wire.$$.pcap >/dev/null 2>&1 & TP=$!
 sleep 4
 ./bin/tollgate --profile toll --code hamming74 --show-bits & PIDS+=($!)
 sleep 0.5
@@ -47,7 +47,7 @@ sleep 0.5
 ./bin/vehicle --profile toll --code hamming74 --seed 42 --count 20 --delay-ms 500 & VP=$!; PIDS+=($VP)
 wait $VP; rc=$?
 sleep 1
-kill "${PIDS[@]}" 2>/dev/null; sudo pkill -INT -x tshark 2>/dev/null; wait $TP 2>/dev/null; PIDS=()
+kill "${PIDS[@]}" 2>/dev/null; sudo pkill -INT -x dumpcap 2>/dev/null; wait $TP 2>/dev/null; PIDS=()
 sudo chown "$USER" /tmp/wire.$$.pcap 2>/dev/null; mv /tmp/wire.$$.pcap results/tmp/wire.pcap
 echo "--- packets per destination port ---"
 tshark -r results/tmp/wire.pcap -T fields -e udp.dstport 2>/dev/null | sort | uniq -c
