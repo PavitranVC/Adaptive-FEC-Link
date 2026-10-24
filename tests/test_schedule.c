@@ -30,6 +30,19 @@ TEST(parse_invalid) {
     CHECK(schedule_parse("toll:10x", &s) != 0);
 }
 
+/* Counts strtol would accept (leading space, sign), overflowing counts and sums above INT_MAX are rejected. */
+TEST(parse_rejects_sign_space_and_overflow) {
+    schedule_t s;
+    CHECK(schedule_parse("toll: 5", &s) != 0);
+    CHECK(schedule_parse("toll:+5", &s) != 0);
+    CHECK(schedule_parse("toll:-5", &s) != 0);
+    CHECK(schedule_parse("toll:99999999999999999999999", &s) != 0);   /* strtol saturates */
+    CHECK(schedule_parse("toll:2147483648", &s) != 0);
+    CHECK(schedule_parse("toll:2147483647,hospital:1", &s) != 0);     /* total would exceed INT_MAX */
+    CHECK_EQ_INT(schedule_parse("toll:2147483647", &s), 0);
+    CHECK_EQ_INT(schedule_total(&s), 2147483647L);
+}
+
 /* Segment switch happens exactly at the cumulative boundary, and the last segment stays in force past the end. */
 TEST(segment_lookup_and_last_segment_persists) {
     schedule_t s;
@@ -54,6 +67,7 @@ TEST(to_linksim_segments) {
 int main(void) {
     RUN(parse_valid);
     RUN(parse_invalid);
+    RUN(parse_rejects_sign_space_and_overflow);
     RUN(segment_lookup_and_last_segment_persists);
     RUN(to_linksim_segments);
     return TEST_REPORT();
