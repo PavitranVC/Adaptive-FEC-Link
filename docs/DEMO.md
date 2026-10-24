@@ -72,6 +72,8 @@ All commands below are run from the repository root after `make`.
 
 ## 1. One-terminal demo (recommended for presenting)
 
+> Whole viva demo in one go (preflight, 3-process + tshark, adaptive, dashboard, compare, plots): `tools/present.sh` (`--nopause`, `--check`).
+
 ```sh
 make demo                      # TOLL_PLAZA profile, Hamming(7,4), 20 frames, 250 ms apart
 make demo-hospital             # HOSPITAL_IMAGING profile (bursty Gilbert-Elliott channel)
