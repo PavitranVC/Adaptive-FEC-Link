@@ -38,8 +38,8 @@ result 1 $rc
 # 2. three processes + packet capture
 banner "2. Three-process demo with tshark capture"
 mkdir -p results/tmp; rm -f results/tmp/wire.pcap
-sudo tshark -i lo -f "udp portrange 9000-9002" -w results/tmp/wire.pcap >/dev/null 2>&1 & PIDS+=($!)
-sleep 3
+sudo tshark -i lo -f "udp portrange 9000-9002" -w results/tmp/wire.pcap >/dev/null 2>&1 & TP=$!
+sleep 4
 ./bin/tollgate --profile toll --code hamming74 --show-bits & PIDS+=($!)
 sleep 0.5
 ./bin/channel --profile toll --model bsc --p 0.01 --seed 42 & PIDS+=($!)
@@ -47,11 +47,11 @@ sleep 0.5
 ./bin/vehicle --profile toll --code hamming74 --seed 42 --count 20 --delay-ms 500 & VP=$!; PIDS+=($VP)
 wait $VP; rc=$?
 sleep 1
-kill "${PIDS[@]}" 2>/dev/null; sudo pkill -INT -x tshark 2>/dev/null; wait 2>/dev/null; PIDS=()
+kill "${PIDS[@]}" 2>/dev/null; sudo pkill -INT -x tshark 2>/dev/null; wait $TP 2>/dev/null; PIDS=()
 sudo chown "$USER" results/tmp/wire.pcap 2>/dev/null
 echo "--- packets per destination port ---"
 tshark -r results/tmp/wire.pcap -T fields -e udp.dstport 2>/dev/null | sort | uniq -c
-[ -s results/tmp/wire.pcap ] || rc=1
+[ -n "$(tshark -r results/tmp/wire.pcap 2>/dev/null | head -1)" ] || rc=1
 result 2 $rc
 
 # 3. adaptive FEC
