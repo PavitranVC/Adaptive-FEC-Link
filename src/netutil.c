@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <time.h>
 #include <unistd.h>
 #include "netutil.h"
@@ -61,7 +62,13 @@ long net_recv(int fd, void *buf, size_t cap, int timeout_ms) {
     int r = poll(&p, 1, timeout_ms);
     if (r == 0) return 0;
     if (r < 0) return -1;
-    ssize_t n = recvfrom(fd, buf, cap, 0, NULL, NULL);
+    struct iovec iov = {buf, cap};
+    struct msghdr mh;
+    memset(&mh, 0, sizeof mh);
+    mh.msg_iov = &iov;
+    mh.msg_iovlen = 1;
+    ssize_t n = recvmsg(fd, &mh, 0);
+    if (n > 0 && (mh.msg_flags & MSG_TRUNC)) return -1;   /* datagram larger than cap: drop it, never parse a cut-off prefix */
     /* An EMPTY datagram must not look like a timeout (0) - callers would stop. */
     if (n == 0) return NET_EMPTY;
     return n < 0 ? -1 : (long)n;
