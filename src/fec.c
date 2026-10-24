@@ -159,6 +159,7 @@ size_t fec_encode(const fec_config_t *cfg, const uint8_t *payload, size_t kbits,
     const code_entry_t *e = entry(cfg->code);
     size_t n = (size_t)fec_block_n(cfg), k = (size_t)fec_block_k(cfg), nb = nblocks(cfg, kbits);
     uint8_t chunk[PAYLOAD_BITS_DEFAULT], work[FEC_MAX_CODED_BITS];
+    if (nb * n > FEC_MAX_CODED_BITS) return 0;   /* too big for the work buffer: encode nothing */
     for (size_t b = 0; b < nb; b++) {
         for (size_t j = 0; j < k; j++) {           /* copy chunk, zero-pad past the payload */
             size_t i = b * k + j;
@@ -177,6 +178,11 @@ void fec_decode(const fec_config_t *cfg, uint8_t *coded, size_t nbits,
     uint8_t chunk[PAYLOAD_BITS_DEFAULT], before[FEC_MAX_CODED_BITS], work[FEC_MAX_CODED_BITS];
     memset(res, 0, sizeof *res);
     res->blocks = (int)nb;
+    if (nbits > FEC_MAX_CODED_BITS || nbits % n != 0 || nb * k < kbits) {
+        memset(payload, 0, kbits);               /* size mismatch: report a failure, never overrun */
+        res->failed_blocks = nb ? (int)nb : 1;
+        return;
+    }
     deinterleave(coded, work, nbits, cfg->interleave);
     for (size_t b = 0; b < nb; b++) {
         uint8_t *blk = work + b * n;
