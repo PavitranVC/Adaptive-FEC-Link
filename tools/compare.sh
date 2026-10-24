@@ -14,11 +14,35 @@
 # Files: results/tmp/compare_<code>.{txt,log}; .txt is the tollgate key=value summary.
 # Output: one table, a row per summary key and a column per code. Rows follow the key order of
 # the FIRST summary file; a key missing from a later file prints as empty.
-# Exit status: 0, or 1 if a vehicle run fails or a summary file was not produced.
+# Exit status: 0, 2 for a bad code name or non-positive --count/--idle-timeout-ms, or 1 if a vehicle run fails or a summary file was not produced.
 cd "$(dirname "$0")/.." || exit 1
 BIN=${BIN:-bin}      # make sanitize sets BIN=build/asan/bin
+# --count 0 / --idle-timeout-ms 0 (or any non-positive or non-numeric value) would leave the
+# receivers waiting forever, so reject them before anything is started.
+prev=""
+for a in "$@"; do
+    case $prev in
+    --count|--idle-timeout-ms)
+        case $a in
+        ''|*[!0-9]*) echo "$prev must be a positive integer (got '$a')" >&2; exit 2 ;;
+        esac
+        [ "$a" -gt 0 ] || { echo "$prev must be a positive integer (got '$a')" >&2; exit 2; }
+        ;;
+    esac
+    prev=$a
+done
+
 mkdir -p results/tmp
 CODES=${CODES:-"hamming74 bch157"}
+# Code names end up in file names under results/tmp/, so only [A-Za-z0-9_] is accepted
+# (no spaces, globs or '/'). Checked before anything is started;
+# set -f stops $CODES from globbing.
+set -f
+for code in $CODES; do
+    case $code in
+    ''|*[!A-Za-z0-9_]*) echo "invalid code name '$code' (allowed: A-Za-z0-9_)" >&2; exit 2 ;;
+    esac
+done
 
 files=""
 for code in $CODES; do

@@ -13,15 +13,30 @@
 # so a --log or --summary-file given by the caller is overridden (the last occurrence wins).
 # Files written: results/tmp/{tollgate.csv,summary.txt,channel.csv}.
 # Exit status: that of the vehicle if it failed, else that of the tollgate, 1 if a binary is
-# missing, 130 if interrupted.
+# missing, 2 for a bad --count/--idle-timeout-ms, 130 if interrupted.
 # The tollgate and channel stop only on their idle timeout (--idle-timeout-ms, default 10 s,
-# counted from the first packet), so the script returns that long after the vehicle ends. With
-# --count 0 or --idle-timeout-ms 0 no timeout applies and the script waits until interrupted.
+# counted from the first packet), so the script returns that long after the vehicle ends.
+# --count and --idle-timeout-ms must be positive integers (0 would wait forever): exit 2.
 cd "$(dirname "$0")/.." || exit 1
 BIN=${BIN:-bin}      # make sanitize sets BIN=build/asan/bin
 SHOWBITS=${SHOWBITS:-1}   # 0 = no per-frame bit maps (make demo-arq / demo-harq default)
 # $SB is deliberately expanded unquoted below: empty means "no argument", not "".
 SB="--show-bits"; [ "$SHOWBITS" = 0 ] && SB=""
+# --count 0 / --idle-timeout-ms 0 (or any non-positive or non-numeric value) would leave the
+# receivers waiting forever, so reject them before anything is started.
+prev=""
+for a in "$@"; do
+    case $prev in
+    --count|--idle-timeout-ms)
+        case $a in
+        ''|*[!0-9]*) echo "$prev must be a positive integer (got '$a')" >&2; exit 2 ;;
+        esac
+        [ "$a" -gt 0 ] || { echo "$prev must be a positive integer (got '$a')" >&2; exit 2; }
+        ;;
+    esac
+    prev=$a
+done
+
 mkdir -p results/tmp
 
 for b in $BIN/tollgate $BIN/channel $BIN/vehicle; do
