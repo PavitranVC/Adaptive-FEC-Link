@@ -1,3 +1,8 @@
+/*
+ * hamming.c - Hamming(2^r - 1, 2^r - 1 - r) encoder and single-error-correcting decoder, the
+ * block coder behind CODE_HAMMING74 and CODE_HAMMING1511 in fec.c. Layout and syndrome
+ * convention are described in hamming.h. Bit vectors are one bit per byte.
+ */
 #include "hamming.h"
 
 int hamming_n(int r) { return (1 << r) - 1; }
@@ -26,6 +31,8 @@ void hamming_encode(int r, const uint8_t *data, uint8_t *code) {
         code[(1 << j) - 1] = (uint8_t)((s >> j) & 1);
 }
 
+/* The syndrome is an XOR of positions <= n, so it is always a valid index (1..n) when non-zero.
+ * With two or more errors it still "corrects" some bit and reports 1: failure is undetectable. */
 int hamming_decode(int r, uint8_t *code, uint8_t *data) {
     int n = hamming_n(r), d = 0, fixed = 0;
     int s = hamming_syndrome(r, code);

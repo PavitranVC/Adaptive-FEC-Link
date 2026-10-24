@@ -16,6 +16,17 @@ Writes PNGs into results/:
   silent_wrong<suffix>.png          silent-wrong rate per code (CRC passed, ID wrong)
   latency<suffix>.png               mean decode latency per code
 """
+# The input CSV is recognised by its first line, not by its name (see main()):
+#   "strategy,code,channel,seeds,..."  multi-seed means + CI   -> goodput_vs_success_ci.png or
+#                                      ladder_rs_experiment.png (when a "ladder_rs" row exists)
+#   "strategy,..."                     single-seed comparison  -> strategy_comparison.png and
+#                                      goodput_vs_success.png
+#   "frame,tx,segment,level,..."       adaptive --trace file   -> adaptive_level.png
+#   anything else                      bench sweep             -> the five PNGs listed above
+# Exception: several input files, or a first file whose name contains "rtt_", is treated as a
+# set of bench_rtt_<N>.csv files (N = RTT in ms from the file name) -> rtt_sensitivity.png.
+# --suffix applies to the bench-sweep PNGs only; the other plots use fixed file names.
+# Each plot function returns the PNG path, or None if the CSV held nothing to draw.
 import argparse
 import csv
 import os
@@ -48,6 +59,8 @@ COLORS["rs_t8"], MARKERS["rs_t8"], LABELS["rs_t8"] = "#3b3a37", "x", "RS(32,16) 
 
 
 def load(path):
+    """Read a bench sweep CSV (columns as written by bench.c); numeric columns become float/int.
+    A missing column raises KeyError, a non-numeric cell ValueError."""
     rows = []
     with open(path, newline="") as f:
         for r in csv.DictReader(f):
@@ -68,6 +81,7 @@ def base_code(code):
 
 
 def codes_in(rows):
+    # Order: CODE_ORDER of the base code, then interleaver depth; unknown codes go last.
     present = {r["code"] for r in rows}
     order = {c: i for i, c in enumerate(CODE_ORDER)}
     return sorted(present, key=lambda c: (order.get(base_code(c)[0], 99), base_code(c)[1], c))
@@ -107,6 +121,9 @@ def label_of(code, rows):
 
 
 def sweep_plot(rows, model, xlabel, title, out, logx):
+    """One line per code, success rate vs the swept parameter, for one noise model.
+    `title` must end in a " [...]" tag: the part before it is the plot title and the tag text
+    is appended to the x label (title.index(" [") raises ValueError otherwise)."""
     sel = [r for r in rows if r["model"] == model]
     if not sel:
         return None
@@ -131,6 +148,7 @@ def sweep_plot(rows, model, xlabel, title, out, logx):
 
 
 def bar_plot(rows, values, title, ylabel, out, fmt):
+    """One bar per code; `values(code)` gives the height and `fmt` the label above the bar."""
     codes = codes_in(rows)
     vals = [values(code) for code in codes]
     fig, ax = plt.subplots(figsize=(10, 5), facecolor=SURFACE)
@@ -173,6 +191,8 @@ def goodput_plot(rows, outdir):
         axes = [axes]
     for ax, ch in zip(axes, channels):
         pts = [r for r in rows if r["channel"] == ch]
+        # span: success-rate range on this panel (1.0 if all equal); the 0.1*span and 0.035
+        # thresholds below are in axis units and decide which markers share one text label.
         span = max(r["success_rate"] for r in pts) - min(r["success_rate"] for r in pts) or 1.0
         groups = []                     # points closer than ~2% of the axes share one label
         for r in pts:
@@ -213,6 +233,7 @@ CI_EXTRA = {"ladder_rs": ("ADAPTIVE (all-RS ladder)", PALETTE[3], "*")}
 
 
 def load_ci(paths):
+    # Only columns named *_mean / *_ci95 are converted; "seeds" and "frames" stay strings.
     rows = []
     for path in paths:
         with open(path, newline="") as f:
@@ -243,9 +264,13 @@ def ci_plot(paths, outdir, channel="schedule"):
     Left: every strategy; right: zoom on the reliable top-right corner where the CIs are visible."""
     rows = [r for r in load_ci(paths) if r["channel"] == channel]
     if not rows:
-        return None
+        return None            # e.g. the CSV was made without --schedule
+    # `seeds` is taken from the first row only; all rows of one bench run share it.
     seeds = rows[0]["seeds"]
     fig, axes = plt.subplots(1, 2, figsize=(13, 5.8), facecolor=SURFACE)
+    # Right-hand panel shows only strategies that are almost always right, where the CIs are
+    # too small to see on the full-range axes. If none reach 99.9% the zoom panel has no points
+    # and the min()/max() calls below raise ValueError.
     zoom = [r for r in rows if r["success_mean"] >= 0.999]
     for ax, pts, full in ((axes[0], rows, True), (axes[1], zoom, False)):
         for r in pts:
@@ -284,6 +309,7 @@ def ci_plot(paths, outdir, channel="schedule"):
         if full:
             ax.set_xlim(max(0.0, min(r["success_mean"] for r in pts) - 0.12), 1.02)
         else:
+            # x range: from 1.5x the distance-to-1.0 below the lowest CI edge up to just past 1.0
             lo = min(r["success_mean"] - r["success_ci95"] for r in pts)
             ax.set_xlim(lo - 1.5 * (1.0 - lo), 1.0 + 0.15 * (1.0 - lo))
             ys = [r["goodput_mean"] for r in pts]
@@ -309,6 +335,8 @@ def ci_plot(paths, outdir, channel="schedule"):
     return out
 
 
+# (strategy, code) pairs drawn by rtt_plot(), in colour order (PALETTE[i]); other rows in the
+# CSVs are ignored.
 RTT_SERIES = [("fec", "rs_t8"), ("arq", "none"), ("harq", "bch3116"), ("harq", "rs_t4"),
               ("harq", "rs_t8"), ("adaptive", "ladder")]
 
@@ -316,6 +344,8 @@ RTT_SERIES = [("fec", "rs_t8"), ("arq", "none"), ("harq", "bch3116"), ("harq", "
 def rtt_plot(paths, outdir, channel="schedule"):
     """p99 delivery latency vs simulated RTT, one line per strategy (files bench_rtt_<N>.csv)."""
     import re
+    # Files whose name has no "rtt_<digits>" are skipped silently. If no file yields a row for
+    # `channel`, data is empty and the max() below raises ValueError.
     data = {}
     for p in paths:
         m = re.search(r"rtt_(\d+)", os.path.basename(p))
@@ -364,6 +394,8 @@ def strategy_plot(path, outdir):
         for k in ("success_rate", "retx_per_frame", "mean_latency_ms", "p99_latency_ms", "mean_code_rate"):
             r[k] = float(r[k])
         r["goodput"] = float(r.get("goodput") or 0.0)
+    # Missing (strategy, code) pairs on a channel are drawn as NaN gaps. The goodput column is
+    # optional in old CSVs and defaults to 0.0, so the "goodput" test at the end is always true.
     labels, seen = [], set()
     for r in rows:
         key = (r["strategy"], r["code"])
@@ -415,11 +447,14 @@ def strategy_plot(path, outdir):
 
 
 def main():
+    """Dispatch on the CSV kind (see the comment at the top of this file)."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("csv", nargs="+")
     ap.add_argument("--suffix", default="")
     ap.add_argument("--outdir", default="results")
     a = ap.parse_args()
+    # Missing input file raises FileNotFoundError. An empty first file gives "" and falls through
+    # to the bench-sweep branch, which exits with a message.
     with open(a.csv[0]) as f:
         first = f.readline()
     if first.startswith("strategy,code,channel,seeds,"):
@@ -437,6 +472,7 @@ def main():
     if header.startswith("strategy,"):
         print("wrote", strategy_plot(a.csv, a.outdir))
         return
+    # trace_plot() and strategy_plot() raise (IndexError / ZeroDivisionError) on a header-only file.
     if header.startswith("frame,tx,segment,level"):
         print("wrote", trace_plot(a.csv, a.outdir))
         return
@@ -474,6 +510,8 @@ def silent_plot(rows, out, tag):
     payload that the CRC CAUGHT (detected_fail) vs frames that slipped through (silent_wrong).
     Log scale; a zero count is drawn as an upper bound '< 1/N' marker."""
     codes = codes_in(rows)
+    # Counts are rebuilt as rate * frames, so they are floats and carry rounding of the 6-decimal
+    # CSV rates; adequate for a log-scale plot, not for exact counts.
     caught, silent, frames = defaultdict(float), defaultdict(float), defaultdict(int)
     for r in rows:
         caught[r["code"]] += r["detected_fail_rate"] * r["frames"]
@@ -515,6 +553,7 @@ def silent_plot(rows, out, tag):
     return out
 
 
+# Level names for the default (mixed) ladder; must match the level numbers in the trace CSV.
 LADDER = ["L0 uncoded", "L1 Hamming(7,4)", "L2 BCH(15,7)", "L3 BCH(31,16)",
           "L4 RS(24,16) t=4", "L5 RS(32,16) t=8"]
 
@@ -528,6 +567,7 @@ def trace_plot(path, outdir):
     fig, ax = plt.subplots(figsize=(12, 4.8), facecolor=SURFACE)
     # shade the channel segments
     start, seg = 0, rows[0]["segment"]
+    # Consecutive rows with the same "segment" form one shaded span. Rows must be in frame order.
     shade = {"TOLL_PLAZA": PALETTE[0], "HOSPITAL_IMAGING": PALETTE[1]}
     spans = []
     for i, r in enumerate(rows + [{"segment": None}]):

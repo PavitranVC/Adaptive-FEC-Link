@@ -1,3 +1,9 @@
+/*
+ * bch.c - binary primitive BCH codes: generator polynomial construction, systematic encoder and
+ * the syndrome / Berlekamp-Massey / Chien decoder (theory in bch.h). Behind CODE_BCH157 and
+ * CODE_BCH3116 in fec.c; bch_berlekamp_massey is also reused by rs.c. Bit vectors are one bit
+ * per byte, index i = coefficient of x^i.
+ */
 #include <string.h>
 #include "bch.h"
 
@@ -10,6 +16,7 @@
  * Returns the degree; coefficients in out[0..deg]. */
 static int minimal_poly(const gf_t *f, int i, uint8_t *used, uint8_t *out) {
     int poly[BCH_MAX_N + 1] = {1};   /* GF(2^m) coefficients, starts as "1" */
+    /* The coset loop ends because doubling modulo n (n is odd) is a permutation of 0..n-1. */
     int deg = 0, j = i % f->n;
     do {
         /* poly(x) *= (x + alpha^j) */
@@ -24,7 +31,8 @@ static int minimal_poly(const gf_t *f, int i, uint8_t *used, uint8_t *out) {
     return deg;
 }
 
-/* a(x) *= b(x) over GF(2). */
+/* a(x) *= b(x) over GF(2). The product is built in a scratch buffer and copied back, so
+ * a must have room for deg_a + deg_b + 1 coefficients. */
 static int poly_mul_gf2(uint8_t *a, int deg_a, const uint8_t *b, int deg_b) {
     uint8_t r[2 * (BCH_MAX_N + 1)] = {0};
     for (int i = 0; i <= deg_a; i++)
@@ -43,15 +51,19 @@ int bch_init(bch_code_t *c, int m, unsigned prim_poly, int t) {
     uint8_t used[BCH_MAX_N + 1] = {0}, mp[BCH_MAX_N + 1];
     c->g[0] = 1;
     c->deg_g = 0;
+    /* Narrow-sense: roots are alpha^1..alpha^(2t). Conjugates share a minimal polynomial, so
+     * each cyclotomic coset is multiplied in once (this is the LCM). */
     for (int i = 1; i <= 2 * t; i++) {       /* LCM: include each coset only once */
         if (used[i % c->n]) continue;
         int d = minimal_poly(&c->gf, i, used, mp);
         c->deg_g = poly_mul_gf2(c->g, c->deg_g, mp, d);
     }
-    c->k = c->n - c->deg_g;
+    c->k = c->n - c->deg_g;                  /* too many roots would leave no data bits */
     return c->k > 0 ? 0 : -1;
 }
 
+/* Lazy, unsynchronised initialisation (not thread-safe); the fixed parameters always succeed,
+ * so the bch_init result is not checked. */
 const bch_code_t *bch157(void) {
     static bch_code_t c;
     static int ready = 0;
@@ -71,6 +83,8 @@ const bch_code_t *bch3116(void) {
  * ------------------------------------------------------------------------------------------ */
 
 void bch_encode(const bch_code_t *c, const uint8_t *data, uint8_t *code) {
+    /* code = [parity (n-k) | data (k)]. The remainder is accumulated in place in r: each set
+     * coefficient at degree i is cancelled by XOR-ing g(x) shifted so its top term hits i. */
     int p = c->n - c->k;                      /* number of parity bits = deg g */
     uint8_t r[BCH_MAX_N];
     memset(r, 0, (size_t)c->n);
@@ -129,6 +143,8 @@ int bch_berlekamp_massey(const gf_t *f, const uint8_t *S, int nsyn, uint8_t *lam
     return L;
 }
 
+/* Positions are array indices (power of x), 0..n-1, in increasing order. gf_exp accepts the
+ * negative exponent -i*d. The caller must provide room for up to n entries in pos. */
 int bch_chien(const bch_code_t *c, const uint8_t *lambda, int L, int *pos) {
     int found = 0;
     for (int i = 0; i < c->n; i++) {
@@ -146,6 +162,9 @@ int bch_decode(const bch_code_t *c, uint8_t *code, uint8_t *data) {
     int pos[BCH_MAX_N], fixed = 0, p = c->n - c->k;
     if (!bch_syndromes(c, code, S)) {
         int L = bch_berlekamp_massey(&c->gf, S, 2 * c->t, lambda);
+        /* A valid correctable pattern has exactly L distinct roots with L <= t. Anything else
+         * is flagged and code is left unrepaired (data is still copied out). More than t errors
+         * can also land on a different codeword; that miscorrection is not detectable here. */
         int roots = L <= c->t ? bch_chien(c, lambda, L, pos) : -1;
         if (roots != L) {                  /* more than t errors: give up, but say so */
             for (int j = 0; j < c->k; j++) data[j] = code[p + j];

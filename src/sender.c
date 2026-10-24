@@ -1,3 +1,8 @@
+/*
+ * sender.c - the vehicle's per-frame transmit state machine (rules in sender.h): which code to
+ * use for the next transmission, and what to do on ACK, NAK or timeout. No I/O or timers here;
+ * the caller (bin/vehicle, bin/bench) owns sockets and the clock.
+ */
 #include <string.h>
 #include "sender.h"
 
@@ -39,7 +44,8 @@ fec_config_t sender_config(const sender_t *s) {
 
 int sender_needs_feedback(const sender_t *s) { return s->strategy != STRAT_FEC; }
 
-/* One more transmission, or give up when the retry budget is spent. */
+/* s->attempt counts retransmissions, so a frame is sent at most max_retries + 1 times.
+ * attempt travels in an 8-bit wire field (packet.h, feedback.h). */
 static send_action_t retry_or_give_up(sender_t *s) {
     if (s->attempt >= s->max_retries) { s->gave_up++; return SEND_GIVE_UP; }
     s->attempt++;
@@ -50,6 +56,8 @@ static send_action_t retry_or_give_up(sender_t *s) {
 send_action_t sender_on_feedback(sender_t *s, const feedback_t *fb, int *level_change) {
     if (level_change) *level_change = 0;
     if (fb->seq != s->seq) return SEND_IGNORE;                  /* stale / duplicate */
+    /* The controller sees every feedback for the current seq, including a NAK that is then
+     * ignored below as stale; adapt_update filters by ladder level itself. */
     if (s->strategy == STRAT_ADAPTIVE) {
         int ch = adapt_update(&s->ctl, fb);                     /* may step the code level */
         if (level_change) *level_change = ch;
@@ -59,6 +67,7 @@ send_action_t sender_on_feedback(sender_t *s, const feedback_t *fb, int *level_c
     return retry_or_give_up(s);
 }
 
+/* A timeout is treated as a NAK for the current attempt; the controller gets no feedback. */
 send_action_t sender_on_timeout(sender_t *s) {
     s->timeouts++;
     return retry_or_give_up(s);

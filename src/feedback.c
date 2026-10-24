@@ -1,3 +1,7 @@
+/*
+ * feedback.c - serialisation of the 22-byte tollgate -> vehicle ACK/NAK datagram (layout in
+ * feedback.h). All multi-byte fields are big-endian.
+ */
 #include <string.h>
 #include "feedback.h"
 
@@ -21,6 +25,9 @@ size_t feedback_serialize(const feedback_t *f, uint8_t *b, size_t cap) {
     return FEEDBACK_BYTES;
 }
 
+/* Accepts only an exact 22-byte datagram with magic "FB", version 1 and type ACK or NAK.
+ * The numeric fields are taken as received: level and the window counters are not range-checked
+ * here (win_fail may exceed win_n), so consumers such as adapt_update must tolerate that. */
 int feedback_parse(const uint8_t *b, size_t len, feedback_t *f) {
     if (len != FEEDBACK_BYTES || b[0] != 'F' || b[1] != 'B' || b[2] != 1) return -1;
     if (b[3] != FB_ACK && b[3] != FB_NAK) return -1;

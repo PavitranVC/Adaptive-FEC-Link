@@ -1,9 +1,15 @@
-/* Tests for the ACK/NAK feedback packet and the stop-and-wait sender state machine. */
+/*
+ * Tests feedback.c (22-byte ACK/NAK packet) and sender.c (per-frame strategy state machine).
+ * A failure here means feedback fields are lost or reordered on the wire, or the sender retries,
+ * gives up or accepts stale feedback differently from the rules documented in sender.h, which
+ * would corrupt ARQ/HARQ delivery accounting.
+ */
 #include <string.h>
 #include "testlib.h"
 #include "feedback.h"
 #include "sender.h"
 
+/* Serialize/parse is lossless for every field; short and wrong-magic buffers are rejected (cap and length boundaries). */
 TEST(feedback_roundtrip) {
     feedback_t f, g;
     memset(&f, 0, sizeof f);
@@ -24,6 +30,7 @@ TEST(feedback_roundtrip) {
     CHECK(feedback_parse(wire, FEEDBACK_BYTES, &g) != 0);       /* bad magic */
 }
 
+/* CLI strategy names map both ways and an unknown name is refused (--strategy input). */
 TEST(strategy_names) {
     strategy_t s;
     CHECK(strategy_from_name("fec", &s) == 0 && s == STRAT_FEC);
@@ -50,6 +57,7 @@ static feedback_t fb(int type, uint32_t seq, int attempt) {
     return f;
 }
 
+/* Plain FEC must not block on feedback and must keep the configured code. */
 TEST(fec_never_waits_and_keeps_its_code) {
     sender_t s = make(STRAT_FEC, 3);
     sender_begin_frame(&s, 0);
@@ -57,6 +65,7 @@ TEST(fec_never_waits_and_keeps_its_code) {
     CHECK(sender_config(&s).code == CODE_BCH157);
 }
 
+/* ARQ relies on retransmission alone, so it must send uncoded and wait for feedback. */
 TEST(arq_sends_uncoded_with_crc_only) {
     sender_t s = make(STRAT_ARQ, 3);
     sender_begin_frame(&s, 0);
@@ -64,6 +73,7 @@ TEST(arq_sends_uncoded_with_crc_only) {
     CHECK(sender_config(&s).code == CODE_NONE);
 }
 
+/* Retry budget boundary: max_retries retransmissions are allowed, the next NAK gives up; a new frame starts clean. */
 TEST(ack_finishes_nak_retries_until_limit) {
     sender_t s = make(STRAT_HARQ, 2);
     sender_begin_frame(&s, 7);
@@ -79,6 +89,7 @@ TEST(ack_finishes_nak_retries_until_limit) {
     CHECK_EQ_INT(sender_on_feedback(&s, &ack, NULL), SEND_DONE);
 }
 
+/* Feedback for another seq, or a NAK for an attempt already superseded by a timeout, must not trigger a second retransmission; a late ACK still completes the frame. */
 TEST(stale_and_duplicate_feedback_is_ignored) {
     sender_t s = make(STRAT_ARQ, 5);
     sender_begin_frame(&s, 10);
@@ -93,6 +104,7 @@ TEST(stale_and_duplicate_feedback_is_ignored) {
     CHECK_EQ_INT(sender_on_feedback(&s, &late_ack, NULL), SEND_DONE);
 }
 
+/* A lost-feedback timeout consumes the same retry budget as a NAK. */
 TEST(timeout_gives_up_after_max_retries) {
     sender_t s = make(STRAT_ARQ, 1);
     sender_begin_frame(&s, 0);
