@@ -23,6 +23,10 @@
 #include "fec.h"
 #include "feedback.h"
 
+/* attempt travels in an 8-bit wire field (packet.h, feedback.h), so max_retries is clamped to this
+ * in sender_init(). The CLI range (0..100) is already below it. */
+#define SENDER_MAX_RETRIES 255
+
 typedef enum { STRAT_FEC = 0, STRAT_ARQ = 1, STRAT_HARQ = 2, STRAT_ADAPTIVE = 3 } strategy_t;
 typedef enum { SEND_DONE, SEND_RETRY, SEND_GIVE_UP, SEND_IGNORE } send_action_t;
 

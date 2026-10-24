@@ -112,6 +112,22 @@ TEST(timeout_gives_up_after_max_retries) {
     CHECK_EQ_INT(sender_on_timeout(&s), SEND_GIVE_UP);
 }
 
+/* max_retries beyond the 8-bit wire field is clamped: attempt never exceeds 255, so every NAK can match. */
+TEST(max_retries_clamped_to_wire_range) {
+    sender_t snd = make(STRAT_HARQ, 1000);
+    CHECK_EQ_INT(snd.max_retries, SENDER_MAX_RETRIES);
+    sender_begin_frame(&snd, 1);
+    int max_attempt = 0, tx = 1;
+    while (sender_on_timeout(&snd) == SEND_RETRY) {
+        if (snd.attempt > max_attempt) max_attempt = snd.attempt;
+        tx++;
+    }
+    CHECK_EQ_INT(max_attempt, 255);
+    CHECK_EQ_INT(tx, 256);
+    snd = make(STRAT_HARQ, -3);
+    CHECK_EQ_INT(snd.max_retries, 0);
+}
+
 int main(void) {
     RUN(feedback_roundtrip);
     RUN(strategy_names);
@@ -120,5 +136,6 @@ int main(void) {
     RUN(ack_finishes_nak_retries_until_limit);
     RUN(stale_and_duplicate_feedback_is_ignored);
     RUN(timeout_gives_up_after_max_retries);
+    RUN(max_retries_clamped_to_wire_range);
     return TEST_REPORT();
 }

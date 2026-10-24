@@ -23,7 +23,9 @@ void sender_init(sender_t *s, strategy_t strategy, const fec_config_t *fixed,
     memset(s, 0, sizeof *s);
     s->strategy = strategy;
     s->fixed = *fixed;
-    s->max_retries = max_retries;
+    /* Clamps max_retries to [0, SENDER_MAX_RETRIES]: attempt is sent as 8 bits, so 256 would
+     * go out as 0 and its NAK would never match; a negative budget is the same as none. */
+    s->max_retries = max_retries < 0 ? 0 : max_retries > SENDER_MAX_RETRIES ? SENDER_MAX_RETRIES : max_retries;
     adapt_params_t defaults;
     adapt_defaults(&defaults);
     adapt_init(&s->ctl, ap ? ap : &defaults);
