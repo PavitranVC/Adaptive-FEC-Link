@@ -51,6 +51,10 @@ def main():
     check("one level point per frame", len(s["levels"]) == 4)
     check("recent list bounded", len(dashboard.summarize(lines, recent=3)["recent"]) == 3)
     check("missing file -> empty state", dashboard.load("/nonexistent/x.jsonl")["frames"] == 0)
+    # non-object JSON, non-numeric lat_us and unhashable seq are skipped, not raised
+    odd = dashboard.summarize(["42", "[1]", '"x"', "null", '{"seq":1,"lat_us":"abc"}',
+                               '{"seq":[1]}', '{"seq":2,"class":"CORRECT","lat_us":5}'])
+    check("odd lines skipped", odd["transmissions"] == 1 and odd["mean_lat_us"] == 5.0)
 
     if failures:
         print("  %d failures" % failures)

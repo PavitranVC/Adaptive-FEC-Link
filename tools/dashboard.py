@@ -49,8 +49,8 @@ def summarize(lines, recent=40, max_levels=600):
     [seq, level, profile] triples, one per frame), level/code/profile/strategy (from the last
     line), mean_lat_us (over all transmissions) and ladder.
 
-    Malformed JSON lines are skipped (also covers a half-written last line). Valid JSON that is
-    not an object, or a non-numeric lat_us, raises. Frames are keyed by seq alone, so a log that
+    Malformed JSON lines are skipped (also covers a half-written last line), as are valid JSON
+    that is not an object and lines with a non-numeric lat_us or an unhashable seq. Frames are keyed by seq alone, so a log that
     spans several runs (seq restarting at 0) is merged into one set of frames."""
     final = {}            # seq -> class
     order = []            # seqs in arrival order
@@ -64,9 +64,17 @@ def summarize(lines, recent=40, max_levels=600):
             r = json.loads(raw)
         except ValueError:
             continue
+        if not isinstance(r, dict):      # e.g. a bare 42 or [1]
+            continue
         seq, cls = r.get("seq"), r.get("class", "DETECTED_FAIL")
+        try:
+            lat = float(r.get("lat_us", 0.0))
+        except (TypeError, ValueError):  # non-numeric lat_us: skip the whole line
+            continue
+        if isinstance(seq, (list, dict)):    # unhashable seq cannot key a frame
+            continue
         tx.append(r)
-        lat_sum += float(r.get("lat_us", 0.0))
+        lat_sum += lat
         if seq not in final:
             final[seq] = cls          # class of the first copy seen
             order.append(seq)
@@ -261,8 +269,8 @@ def make_handler(log_path):
 
 def main():
     """Parse arguments, then print the state once (--once) or serve until Ctrl-C.
-    --port is not range-checked here: a port above 65535 raises OverflowError and a port in use
-    raises OSError from the server constructor, both as an uncaught traceback (exit status 1)."""
+    A --port outside 0-65535 or one that cannot be bound (e.g. in use) prints a one-line error
+    and exits with status 1."""
     ap = argparse.ArgumentParser(description="Live FEC link dashboard")
     ap.add_argument("--log", default="results/tmp/live.jsonl", help="tollgate --jsonl file")
     ap.add_argument("--host", default="127.0.0.1")
@@ -272,7 +280,11 @@ def main():
     if a.once:
         print(json.dumps(load(a.log), indent=1))
         return
-    server = ThreadingHTTPServer((a.host, a.port), make_handler(a.log))
+    try:
+        server = ThreadingHTTPServer((a.host, a.port), make_handler(a.log))
+    except (OverflowError, OSError) as e:    # port out of range, in use, bad host
+        print(f"dashboard: cannot listen on {a.host}:{a.port}: {e}", file=sys.stderr)
+        return 1
     print(f"[DASHBOARD] open http://{a.host}:{a.port}/   (reading {a.log}, Ctrl-C to stop)", flush=True)
     try:
         server.serve_forever()

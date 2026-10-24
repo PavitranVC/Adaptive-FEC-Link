@@ -6,7 +6,8 @@
 #   PORT=8051 sh tools/dashboard.sh --profile toll --strategy adaptive --count 200 [more flags]
 #
 # Flags are forwarded to tools/demo.sh; --jsonl is appended after them, so a caller's --jsonl
-# is overridden. PORT is passed to dashboard.py unchecked and the page is bound to 127.0.0.1
+# is overridden. PORT is passed to dashboard.py (a bad or busy one makes it exit 1, and this script
+# stop) and the page is bound to 127.0.0.1
 # (dashboard.py's default --host). The demo's exit status is not examined (a failed demo still
 # prints "demo finished"). The script's own status is dashboard.py's (from the final "wait"),
 # or 0 after Ctrl-C/TERM, which the trap treats as a normal stop.
@@ -19,9 +20,10 @@ PORT=${PORT:-8050}
 python3 tools/dashboard.py --log results/tmp/live.jsonl --port "$PORT" &
 DB=$!
 trap 'kill $DB 2>/dev/null; exit 0' INT TERM
-# The dashboard is given 0.5 s to bind its port. If it fails to start (e.g. port in use) this
-# is not noticed: the demo still runs and the final "wait" returns immediately.
+# The dashboard is given 0.5 s to bind its port. If it has exited by then (e.g. port in use or
+# out of range) its error is already printed, so stop instead of running the demo without it.
 sleep 0.5
+kill -0 $DB 2>/dev/null || { echo "dashboard failed to start - not starting the demo" >&2; exit 1; }
 echo "=== dashboard: open http://127.0.0.1:$PORT/ (starting the demo in 3 s) ==="
 sleep 3
 sh tools/demo.sh "$@" --jsonl results/tmp/live.jsonl
