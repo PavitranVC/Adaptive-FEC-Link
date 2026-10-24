@@ -267,11 +267,14 @@ def ci_plot(paths, outdir, channel="schedule"):
         return None            # e.g. the CSV was made without --schedule
     # `seeds` is taken from the first row only; all rows of one bench run share it.
     seeds = rows[0]["seeds"]
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5.8), facecolor=SURFACE)
     # Right-hand panel shows only strategies that are almost always right, where the CIs are
-    # too small to see on the full-range axes. If none reach 99.9% the zoom panel has no points
-    # and the min()/max() calls below raise ValueError.
+    # too small to see on the full-range axes. If none reach 99.9% the zoom panel would have no
+    # points (min()/max() below would raise ValueError), so the plot is skipped with a message.
     zoom = [r for r in rows if r["success_mean"] >= 0.999]
+    if not zoom:
+        print("ci_plot: no strategy reaches 99.9% success - skipping the plot")
+        return None
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5.8), facecolor=SURFACE)
     for ax, pts, full in ((axes[0], rows, True), (axes[1], zoom, False)):
         for r in pts:
             col, mk, ms = ci_style(r)
@@ -345,7 +348,7 @@ def rtt_plot(paths, outdir, channel="schedule"):
     """p99 delivery latency vs simulated RTT, one line per strategy (files bench_rtt_<N>.csv)."""
     import re
     # Files whose name has no "rtt_<digits>" are skipped silently. If no file yields a row for
-    # `channel`, data is empty and the max() below raises ValueError.
+    # `channel`, the plot is skipped with a message (max() below would raise ValueError).
     data = {}
     for p in paths:
         m = re.search(r"rtt_(\d+)", os.path.basename(p))
@@ -356,6 +359,9 @@ def rtt_plot(paths, outdir, channel="schedule"):
                 if r["channel"] == channel:
                     data.setdefault((r["strategy"], r["code"]), []).append(
                         (int(m.group(1)), float(r["p99_latency_ms"])))
+    if not data:
+        print(f"rtt_plot: no rows for channel '{channel}' - skipping the plot")
+        return None
     fig, ax = plt.subplots(figsize=(9, 5.2), facecolor=SURFACE)
     ends = []                                   # end labels; overlapping lines share one label
     top = max(y for v in data.values() for _, y in v) or 1.0
@@ -446,6 +452,12 @@ def strategy_plot(path, outdir):
     return out
 
 
+def done(out):
+    """Report a written plot; None means the plot function already printed why it was skipped."""
+    if out:
+        print("wrote", out)
+
+
 def main():
     """Dispatch on the CSV kind (see the comment at the top of this file)."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
@@ -459,11 +471,11 @@ def main():
         first = f.readline()
     if first.startswith("strategy,code,channel,seeds,"):
         os.makedirs(a.outdir, exist_ok=True)
-        print("wrote", ci_plot(a.csv, a.outdir))
+        done(ci_plot(a.csv, a.outdir))
         return
     if len(a.csv) > 1 or "rtt_" in os.path.basename(a.csv[0]):
         os.makedirs(a.outdir, exist_ok=True)
-        print("wrote", rtt_plot(a.csv, a.outdir))
+        done(rtt_plot(a.csv, a.outdir))
         return
     a.csv = a.csv[0]
     with open(a.csv) as f:
@@ -472,9 +484,9 @@ def main():
     if header.startswith("strategy,"):
         print("wrote", strategy_plot(a.csv, a.outdir))
         return
-    # trace_plot() and strategy_plot() raise (IndexError / ZeroDivisionError) on a header-only file.
+    # strategy_plot() raises (ZeroDivisionError) on a header-only file; trace_plot() skips it.
     if header.startswith("frame,tx,segment,level"):
-        print("wrote", trace_plot(a.csv, a.outdir))
+        done(trace_plot(a.csv, a.outdir))
         return
     rows = load(a.csv)
     if not rows:
@@ -562,6 +574,9 @@ def trace_plot(path, outdir):
     """Adaptive code level per frame, on top of the channel profile (shaded) + failed frames."""
     with open(path, newline="") as f:
         rows = list(csv.DictReader(f))
+    if not rows:                       # header-only file: rows[0] below would raise IndexError
+        print(f"trace_plot: {path} has no rows - skipping the plot")
+        return None
     frames = [int(r["frame"]) for r in rows]
     levels = [int(r["level"]) for r in rows]
     fig, ax = plt.subplots(figsize=(12, 4.8), facecolor=SURFACE)
