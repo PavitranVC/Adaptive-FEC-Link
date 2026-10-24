@@ -1,14 +1,28 @@
+/*
+ * cli.c - command-line parsing shared by vehicle, channel, tollgate and bench.
+ *
+ * Input: argv. Accepted forms are "--flag value", "--flag=value" and the value-less
+ * switches handled by apply_switch(). Every numeric flag is range-checked here, so
+ * callers may rely on the ranges below without re-validating.
+ * Output: a filled cli_opts_t. String options (--log, --out, --schedule, ...) store
+ * pointers into argv, not copies; argv must outlive the options. Only --host is copied.
+ * Errors go to stderr; cli_parse() returns -1 (error), 1 (--help printed) or 0.
+ * Mapping those results to process exit codes is left to the caller.
+ */
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include "cli.h"
 
+/* Zeroes all fields first, so pointers (log_path, schedule, ...) default to NULL and
+ * switches to 0. Defaults here are authoritative; some cli.h comments are stale
+ * (e.g. up_threshold is 0.20 here). */
 void cli_defaults(cli_opts_t *o) {
     memset(o, 0, sizeof *o);
     o->code = CODE_HAMMING74;
     o->profile = &PROFILE_TOLL_PLAZA;
     o->model = PROFILE_TOLL_PLAZA.default_model;
-    o->p = -1.0;
+    o->p = -1.0;                /* negative = use the profile's own default */
     o->seed = 1;
     o->count = 20;
     o->rs_t = 4;
@@ -17,7 +31,7 @@ void cli_defaults(cli_opts_t *o) {
     o->channel_port = 9000;
     o->tollgate_port = 9001;
     o->feedback_port = 9002;
-    o->color = -1;
+    o->color = -1;              /* -1 = auto-detect */
     o->idle_timeout_ms = 10000;
     o->frames = 5000;
     o->strategy = STRAT_FEC;
@@ -75,6 +89,9 @@ void cli_usage(FILE *f, const char *prog) {
         prog);
 }
 
+/* Strict base-10 parse: rejects empty input, trailing junk and values outside [lo, hi]
+ * (strtol overflow sets errno). Leading whitespace and a leading +/- sign are accepted
+ * by strtol and not rejected here. *out is written only on success. */
 static int parse_long(const char *flag, const char *s, long lo, long hi, long *out) {
     char *end;
     errno = 0;
@@ -94,6 +111,8 @@ static int parse_int(const char *flag, const char *s, long lo, long hi, int *out
     return 0;
 }
 
+/* Probability in [0, 1]. The negated comparison also rejects NaN; "inf" fails the range
+ * test. Forms like "1e-3" and hex floats are accepted by strtod. */
 static int parse_prob(const char *flag, const char *s, double *out) {
     char *end;
     errno = 0;
@@ -106,7 +125,10 @@ static int parse_prob(const char *flag, const char *s, double *out) {
     return 0;
 }
 
-/* Handles one "--flag value" pair. Returns 0 ok, -1 error. */
+/* Handles one "--flag value" pair. Returns 0 ok, -1 error.
+ * Value ranges are enforced by the parse_* helpers. Cross-flag consistency is not
+ * checked (e.g. --down-threshold may exceed --up-threshold, --start-level is not
+ * checked against the chosen --ladder). */
 static int apply_flag(cli_opts_t *o, const char *f, const char *v) {
     long l;
     if (!strcmp(f, "--code")) {
@@ -129,9 +151,9 @@ static int apply_flag(cli_opts_t *o, const char *f, const char *v) {
         return parse_prob(f, v, &o->p);
     } else if (!strcmp(f, "--seed")) {
         if (parse_long(f, v, 0, 2147483647L, &l)) return -1;
-        o->seed = (uint64_t)l;
+        o->seed = (uint64_t)l;                 /* capped at INT_MAX; larger seeds are rejected */
     } else if (!strcmp(f, "--count")) {
-        return parse_long(f, v, 0, 100000000L, &o->count);
+        return parse_long(f, v, 0, 100000000L, &o->count);   /* 0 = send nothing */
     } else if (!strcmp(f, "--delay-ms")) {
         return parse_int(f, v, 0, 600000, &o->delay_ms);
     } else if (!strcmp(f, "--burst-len")) {
@@ -141,6 +163,7 @@ static int apply_flag(cli_opts_t *o, const char *f, const char *v) {
     } else if (!strcmp(f, "--interleave")) {
         return parse_int(f, v, 1, 256, &o->interleave);
     } else if (!strcmp(f, "--host")) {
+        /* The host string is only length-checked, not validated as an address. */
         if (strlen(v) >= sizeof o->host) { fprintf(stderr, "error: host too long\n"); return -1; }
         strcpy(o->host, v);
     } else if (!strcmp(f, "--channel-port")) {
@@ -150,7 +173,7 @@ static int apply_flag(cli_opts_t *o, const char *f, const char *v) {
     } else if (!strcmp(f, "--feedback-port")) {
         return parse_int(f, v, 1, 65535, &o->feedback_port);
     } else if (!strcmp(f, "--idle-timeout-ms")) {
-        return parse_int(f, v, 0, 86400000, &o->idle_timeout_ms);
+        return parse_int(f, v, 0, 86400000, &o->idle_timeout_ms);   /* up to 24 h; 0 = never */
     } else if (!strcmp(f, "--log")) {
         o->log_path = v;
     } else if (!strcmp(f, "--summary-file")) {
@@ -192,7 +215,7 @@ static int apply_flag(cli_opts_t *o, const char *f, const char *v) {
             return -1;
         }
     } else if (!strcmp(f, "--seeds")) {
-        return parse_int(f, v, 2, 1000, &o->seeds);
+        return parse_int(f, v, 2, 1000, &o->seeds);   /* 1 is rejected; omit the flag for a single seed */
     } else if (!strcmp(f, "--compare-codes")) {
         o->compare_codes = v;
     } else if (!strcmp(f, "--corrupt-header")) {
@@ -204,7 +227,8 @@ static int apply_flag(cli_opts_t *o, const char *f, const char *v) {
     return 0;
 }
 
-/* Flags that take no value. Returns 1 if handled. */
+/* Flags that take no value. Returns 1 if handled. Tried before the "=" split in
+ * cli_parse(), so "--quiet=1" is not a switch and fails as an unknown flag. */
 static int apply_switch(cli_opts_t *o, const char *f) {
     if (!strcmp(f, "--no-color")) o->color = 0;
     else if (!strcmp(f, "--color")) o->color = 1;
@@ -215,6 +239,8 @@ static int apply_switch(cli_opts_t *o, const char *f) {
     return 1;
 }
 
+/* Only used to choose the error message when a flag is the last argument. Must be kept
+ * in sync with apply_flag() by hand; a flag missing here is reported as "unknown". */
 static int is_value_flag(const char *f) {
     static const char *const FLAGS[] = {
         "--code", "--profile", "--model", "--p", "--seed", "--count", "--delay-ms",
@@ -228,6 +254,10 @@ static int is_value_flag(const char *f) {
     return 0;
 }
 
+/* argv[0] is skipped. The first --help/-h stops parsing and returns 1; arguments before
+ * it are still validated. In the two-argument form a next argv entry that starts with "--" is
+ * not taken as the value (it is most likely the next flag, e.g. "--log --quiet"); a value that
+ * really starts with "--" must be written as "--flag=--value". */
 int cli_parse(cli_opts_t *o, int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
@@ -235,7 +265,7 @@ int cli_parse(cli_opts_t *o, int argc, char **argv) {
         if (apply_switch(o, a)) continue;
         const char *eq = strchr(a, '=');
         if (eq && !strncmp(a, "--", 2)) {               /* --flag=value */
-            char flag[64];
+            char flag[64];                              /* flag names longer than 63 chars are rejected */
             size_t len = (size_t)(eq - a);
             if (len >= sizeof flag) { fprintf(stderr, "error: bad flag '%s'\n", a); return -1; }
             memcpy(flag, a, len);
@@ -251,13 +281,23 @@ int cli_parse(cli_opts_t *o, int argc, char **argv) {
                 else fprintf(stderr, "error: unknown flag '%s' (try --help)\n", a);
                 return -1;
             }
+            /* Rejects "--flag --other": a value-taking flag followed by another "--" argument is
+             * a forgotten value, and would otherwise swallow the next flag (e.g. as a file name). */
+            if (is_value_flag(a) && !strncmp(argv[i + 1], "--", 2)) {
+                fprintf(stderr, "error: %s needs a value, got '%s' (write %s=VALUE if intended)\n",
+                        a, argv[i + 1], a);
+                return -1;
+            }
             if (apply_flag(o, a, argv[++i])) return -1;
         }
     }
+    /* Resolved after the loop so --profile and --model may appear in any order. */
     if (!o->model_set) o->model = o->profile->default_model;
     return 0;
 }
 
+/* --burst-len only applies to the burst model. p < 0 is passed through to
+ * profile_noise() as "use the profile default". */
 noise_params_t cli_noise_params(const cli_opts_t *o) {
     noise_model_t m = o->model_set ? o->model : o->profile->default_model;
     noise_params_t np = profile_noise(o->profile, m, o->p);

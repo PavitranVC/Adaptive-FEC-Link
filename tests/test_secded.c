@@ -1,4 +1,8 @@
-/* Tests for extended Hamming SECDED(8,4). */
+/*
+ * Tests secded.c: extended Hamming(8,4), single-error correction and double-error detection.
+ * A failure means a double error would be miscorrected silently instead of flagged, or a single
+ * error (including one on the overall parity bit) would not be repaired.
+ */
 #include <string.h>
 #include "testlib.h"
 #include "secded.h"
@@ -7,6 +11,7 @@ static void int_to_bits(unsigned v, uint8_t *bits) {
     for (int i = 0; i < 4; i++) bits[i] = (uint8_t)((v >> (3 - i)) & 1u);
 }
 
+/* All 16 data words round-trip with status SECDED_OK. */
 TEST(clean_codeword_decodes) {
     uint8_t d[4], c[8], out[4];
     for (unsigned v = 0; v < 16; v++) {
@@ -17,6 +22,7 @@ TEST(clean_codeword_decodes) {
     }
 }
 
+/* Distance 4 between every pair of codewords is what makes double-error detection possible. */
 TEST(minimum_distance_is_4) {
     uint8_t a[4], b[4], ca[8], cb[8];
     int dmin = 99;
@@ -31,6 +37,7 @@ TEST(minimum_distance_is_4) {
     CHECK_EQ_INT(dmin, 4);
 }
 
+/* Exhaustive: a flip at any of the 8 positions, parity bit included, is corrected and the codeword restored. */
 TEST(corrects_every_single_bit_error) {
     uint8_t d[4], c[8], rx[8], out[4];
     for (unsigned v = 0; v < 16; v++) {
@@ -46,6 +53,7 @@ TEST(corrects_every_single_bit_error) {
     }
 }
 
+/* Exhaustive: every 2-bit error is reported as SECDED_DOUBLE rather than miscorrected. */
 TEST(detects_every_double_bit_error) {
     uint8_t d[4], c[8], rx[8], out[4];
     int detected = 0, total = 0;

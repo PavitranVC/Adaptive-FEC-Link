@@ -1,3 +1,7 @@
+/*
+ * profiles.c - the two interference presets and their lookup by CLI name or wire id. The numbers
+ * mirror the table in profiles.h; they are modelling assumptions, not measurements.
+ */
 #include <string.h>
 #include "profiles.h"
 
@@ -5,7 +9,9 @@ const profile_t PROFILE_TOLL_PLAZA = {
     "toll", "TOLL_PLAZA",
     "toll gantry RFID read: mostly random flips, short bursts (modelling assumption)",
     NOISE_BSC,
-    0.01,
+    0.01,                       /* bsc_p */
+    /* initialiser order follows the structs in noise.h: ge = {p_gb, p_bg, e_good, e_bad},
+     * burst = {length in bits, p_frame, density} */
     {0.002, 0.5, 0.005, 0.5},
     {4, 0.2, 0.5},
 };
@@ -20,12 +26,15 @@ const profile_t PROFILE_HOSPITAL_IMAGING = {
 };
 
 const profile_t *profile_by_name(const char *name) {
+    if (!name) return NULL;     /* Rejects NULL (e.g. a missing option): strcmp would crash. */
     const profile_t *all[2] = {&PROFILE_TOLL_PLAZA, &PROFILE_HOSPITAL_IMAGING};
     for (int i = 0; i < 2; i++)
         if (strcmp(name, all[i]->name) == 0 || strcmp(name, all[i]->label) == 0) return all[i];
     return NULL;
 }
 
+/* p_override < 0 means "use the profile value"; otherwise it replaces only the model's main
+ * knob (see profiles.h). Unknown model values fall back to BSC. */
 noise_params_t profile_noise(const profile_t *prof, noise_model_t model, double p_override) {
     int ov = p_override >= 0.0;
     switch (model) {
@@ -41,6 +50,7 @@ noise_params_t profile_noise(const profile_t *prof, noise_model_t model, double 
     }
 }
 
+/* Inverse of profile_by_id for the two known profiles; any other pointer maps to 0 (toll). */
 int profile_id(const profile_t *prof) { return prof == &PROFILE_HOSPITAL_IMAGING ? 1 : 0; }
 
 const profile_t *profile_by_id(int id) {

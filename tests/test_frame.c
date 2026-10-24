@@ -1,4 +1,9 @@
-/* Tests for tag/payload framing, classification and the UDP wire format. */
+/*
+ * Tests frame.c (96-bit tag ID + CRC-32 payload, frame classification, tag hex) and the
+ * packet.c UDP wire format that carries coded frames.
+ * A failure means the receiver would misjudge frame integrity (CRC placement or classification),
+ * or packets would not survive serialize/parse between vehicle, channel and tollgate.
+ */
 #include <string.h>
 #include "testlib.h"
 #include "bits.h"
@@ -9,6 +14,7 @@
 static const uint8_t ID[TAG_ID_BYTES] = {0xE2, 0x80, 0x68, 0x94, 0x00, 0x00, 0x50, 0x1E,
                                          0x2A, 0x3B, 0x4C, 0x5D};
 
+/* Payload layout: ID bytes first, then CRC-32 of the ID, big-endian. */
 TEST(payload_is_id_then_crc) {
     uint8_t bits[PAYLOAD_BITS], bytes[16];
     frame_build_payload(ID, bits);
@@ -19,6 +25,7 @@ TEST(payload_is_id_then_crc) {
     CHECK_EQ_INT(bytes[15], crc & 0xFF);
 }
 
+/* The CRC must catch a flipped bit in either the ID or the CRC field itself. */
 TEST(parse_checks_crc) {
     uint8_t bits[PAYLOAD_BITS], id[TAG_ID_BYTES];
     frame_build_payload(ID, bits);
@@ -31,6 +38,7 @@ TEST(parse_checks_crc) {
     CHECK(frame_parse_payload(bits, id) == 0);
 }
 
+/* Each frame_classify outcome, including decoder-flagged failure with a good CRC and the no-ground-truth case. */
 TEST(classification_rules) {
     uint8_t other[TAG_ID_BYTES];
     memcpy(other, ID, 12);
@@ -43,12 +51,14 @@ TEST(classification_rules) {
     CHECK(strcmp(frame_class_name(CLASS_SILENT_WRONG), "SILENT_WRONG") == 0);
 }
 
+/* Tag-to-hex output is uppercase and zero bytes keep both digits. */
 TEST(tag_hex) {
     char hex[TAG_HEX_LEN + 1];
     tag_to_hex(ID, hex);
     CHECK(strcmp(hex, "E28068940000501E2A3B4C5D") == 0);
 }
 
+/* DATA packet with the ground-truth sidecar survives serialize/parse (bit packing and multi-byte fields). */
 TEST(packet_roundtrip_with_truth) {
     packet_t p, q;
     memset(&p, 0, sizeof p);
@@ -87,6 +97,7 @@ TEST(packet_roundtrip_with_truth) {
     CHECK(memcmp(q.truth.tag, ID, 12) == 0);
 }
 
+/* END packets and packets without a sidecar parse with has_truth == 0. */
 TEST(packet_without_truth_and_end) {
     packet_t p, q;
     memset(&p, 0, sizeof p);
@@ -100,6 +111,7 @@ TEST(packet_without_truth_and_end) {
     CHECK_EQ_INT(q.has_truth, 0);
 }
 
+/* Malformed input is rejected: too-short buffer, truncated packet, nbits larger than the buffer. */
 TEST(packet_rejects_garbage) {
     packet_t q;
     uint8_t junk[8] = {1, 2, 3, 4, 5, 6, 7, 8};

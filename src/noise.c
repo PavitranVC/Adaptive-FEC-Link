@@ -1,3 +1,8 @@
+/*
+ * noise.c - the channel: BSC, Gilbert-Elliott and single-burst bit-flip models plus parameter
+ * helpers. Sits between FEC encode and FEC decode in both the UDP channel process and sim.c.
+ * Reproducibility depends on the exact order of RNG draws in each apply_* function.
+ */
 #include <stdio.h>
 #include <string.h>
 #include "noise.h"
@@ -31,6 +36,8 @@ noise_params_t noise_burst(int length, double p_frame, double density) {
     return np;
 }
 
+/* Stationary probability of the bad state; 0 when both transition rates are 0 (chain never
+ * moves, so it stays in the good state it starts in). */
 static double ge_pi_bad(const ge_params_t *g) {
     double denom = g->p_gb + g->p_bg;
     return denom > 0 ? g->p_gb / denom : 0.0;
@@ -48,6 +55,7 @@ void noise_set_params(noise_t *ch, const noise_params_t *params) {
     ch->ge_bad = params->model == NOISE_GE ? rng_bernoulli(&ch->rng, ge_pi_bad(&params->ge)) : 0;
 }
 
+/* bits[] must hold 0/1 values: the flip is an XOR with 1. */
 static void flip(uint8_t *bits, uint8_t *mask, size_t i) {
     bits[i] ^= 1;
     if (mask) mask[i] = 1;
@@ -63,6 +71,8 @@ static size_t apply_bsc(noise_t *ch, uint8_t *bits, size_t n, uint8_t *mask) {
 static size_t apply_ge(noise_t *ch, uint8_t *bits, size_t n, uint8_t *mask) {
     const ge_params_t *g = &ch->params.ge;
     size_t flips = 0;
+    /* Per bit: one draw for the flip, one for the state transition. The transition after the
+     * last bit is kept in ch->ge_bad, so the next frame continues the same Markov chain. */
     for (size_t i = 0; i < n; i++) {
         double e = ch->ge_bad ? g->e_bad : g->e_good;
         if (rng_bernoulli(&ch->rng, e)) { flip(bits, mask, i); flips++; }
@@ -76,6 +86,9 @@ static size_t apply_ge(noise_t *ch, uint8_t *bits, size_t n, uint8_t *mask) {
 static size_t apply_burst(noise_t *ch, uint8_t *bits, size_t n, uint8_t *mask) {
     const burst_params_t *b = &ch->params.burst;
     if (n == 0 || b->length <= 0 || !rng_bernoulli(&ch->rng, b->p_frame)) return 0;
+    /* A burst longer than the frame is clipped to n. Start is uniform over the n - len + 1
+     * placements that fit; first and last bit always flip (so len == 1 flips one bit), inner
+     * bits flip with probability `density`. */
     size_t len = (size_t)b->length > n ? n : (size_t)b->length;
     size_t start = rng_below(&ch->rng, (uint32_t)(n - len + 1));
     size_t flips = 0;
@@ -86,6 +99,7 @@ static size_t apply_burst(noise_t *ch, uint8_t *bits, size_t n, uint8_t *mask) {
     return flips;
 }
 
+/* mask (if given) is cleared for all n entries first, then set where a flip happened. */
 size_t noise_apply(noise_t *ch, uint8_t *bits, size_t n, uint8_t *mask) {
     if (mask) memset(mask, 0, n);
     switch (ch->params.model) {
@@ -103,7 +117,7 @@ double noise_expected_ber(const noise_params_t *np) {
         double pb = ge_pi_bad(&np->ge);
         return (1.0 - pb) * np->ge.e_good + pb * np->ge.e_bad;
     }
-    case NOISE_BURST: return 0.0;
+    case NOISE_BURST: return 0.0;   /* frame-size dependent, see noise.h */
     }
     return 0.0;
 }
@@ -115,6 +129,7 @@ const char *noise_model_name(noise_model_t m) {
 }
 
 int noise_model_from_name(const char *name, noise_model_t *out) {
+    if (!name || !out) return -1;   /* Rejects NULL arguments: strcmp / the store would crash. */
     for (int i = 0; i < 3; i++)
         if (strcmp(name, MODEL_NAMES[i]) == 0) { *out = (noise_model_t)i; return 0; }
     return -1;

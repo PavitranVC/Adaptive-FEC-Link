@@ -1,9 +1,16 @@
-/* Tests for the ACK/NAK feedback packet and the stop-and-wait sender state machine. */
+/*
+ * Tests feedback.c (22-byte ACK/NAK packet) and sender.c (per-frame strategy state machine).
+ * A failure here means feedback fields are lost or reordered on the wire, or the sender retries,
+ * gives up or accepts stale feedback differently from the rules documented in sender.h, which
+ * would corrupt ARQ/HARQ delivery accounting.
+ */
 #include <string.h>
 #include "testlib.h"
+#include "adapt.h"
 #include "feedback.h"
 #include "sender.h"
 
+/* Serialize/parse is lossless for every field; short and wrong-magic buffers are rejected (cap and length boundaries). */
 TEST(feedback_roundtrip) {
     feedback_t f, g;
     memset(&f, 0, sizeof f);
@@ -24,6 +31,30 @@ TEST(feedback_roundtrip) {
     CHECK(feedback_parse(wire, FEEDBACK_BYTES, &g) != 0);       /* bad magic */
 }
 
+/* Out-of-range level, win_fail > win_n and oversized win_n are refused; boundary values and level 255 pass. */
+TEST(feedback_parse_rejects_out_of_range_fields) {
+    feedback_t f, g;
+    memset(&f, 0, sizeof f);
+    f.type = FB_NAK;
+    f.win_n = 32; f.win_fail = 32; f.level = (uint8_t)(ladder_levels() - 1);
+    uint8_t w[FEEDBACK_BYTES];
+    CHECK_EQ_INT(feedback_serialize(&f, w, sizeof w), FEEDBACK_BYTES);
+    CHECK(feedback_parse(w, sizeof w, &g) == 0);          /* win_fail == win_n, top level */
+    f.level = FEEDBACK_NO_LEVEL;
+    feedback_serialize(&f, w, sizeof w);
+    CHECK(feedback_parse(w, sizeof w, &g) == 0);
+    f.level = (uint8_t)ladder_levels();
+    feedback_serialize(&f, w, sizeof w);
+    CHECK(feedback_parse(w, sizeof w, &g) != 0);          /* level past the ladder */
+    f.level = 0; f.win_fail = 33;
+    feedback_serialize(&f, w, sizeof w);
+    CHECK(feedback_parse(w, sizeof w, &g) != 0);          /* rate > 1 */
+    f.win_n = FEEDBACK_MAX_WINDOW + 1; f.win_fail = 0;
+    feedback_serialize(&f, w, sizeof w);
+    CHECK(feedback_parse(w, sizeof w, &g) != 0);
+}
+
+/* CLI strategy names map both ways and an unknown name is refused (--strategy input). */
 TEST(strategy_names) {
     strategy_t s;
     CHECK(strategy_from_name("fec", &s) == 0 && s == STRAT_FEC);
@@ -50,6 +81,7 @@ static feedback_t fb(int type, uint32_t seq, int attempt) {
     return f;
 }
 
+/* Plain FEC must not block on feedback and must keep the configured code. */
 TEST(fec_never_waits_and_keeps_its_code) {
     sender_t s = make(STRAT_FEC, 3);
     sender_begin_frame(&s, 0);
@@ -57,6 +89,7 @@ TEST(fec_never_waits_and_keeps_its_code) {
     CHECK(sender_config(&s).code == CODE_BCH157);
 }
 
+/* ARQ relies on retransmission alone, so it must send uncoded and wait for feedback. */
 TEST(arq_sends_uncoded_with_crc_only) {
     sender_t s = make(STRAT_ARQ, 3);
     sender_begin_frame(&s, 0);
@@ -64,6 +97,7 @@ TEST(arq_sends_uncoded_with_crc_only) {
     CHECK(sender_config(&s).code == CODE_NONE);
 }
 
+/* Retry budget boundary: max_retries retransmissions are allowed, the next NAK gives up; a new frame starts clean. */
 TEST(ack_finishes_nak_retries_until_limit) {
     sender_t s = make(STRAT_HARQ, 2);
     sender_begin_frame(&s, 7);
@@ -79,6 +113,7 @@ TEST(ack_finishes_nak_retries_until_limit) {
     CHECK_EQ_INT(sender_on_feedback(&s, &ack, NULL), SEND_DONE);
 }
 
+/* Feedback for another seq, or a NAK for an attempt already superseded by a timeout, must not trigger a second retransmission; a late ACK still completes the frame. */
 TEST(stale_and_duplicate_feedback_is_ignored) {
     sender_t s = make(STRAT_ARQ, 5);
     sender_begin_frame(&s, 10);
@@ -93,6 +128,7 @@ TEST(stale_and_duplicate_feedback_is_ignored) {
     CHECK_EQ_INT(sender_on_feedback(&s, &late_ack, NULL), SEND_DONE);
 }
 
+/* A lost-feedback timeout consumes the same retry budget as a NAK. */
 TEST(timeout_gives_up_after_max_retries) {
     sender_t s = make(STRAT_ARQ, 1);
     sender_begin_frame(&s, 0);
@@ -100,13 +136,42 @@ TEST(timeout_gives_up_after_max_retries) {
     CHECK_EQ_INT(sender_on_timeout(&s), SEND_GIVE_UP);
 }
 
+/* max_retries beyond the 8-bit wire field is clamped: attempt never exceeds 255, so every NAK can match. */
+TEST(max_retries_clamped_to_wire_range) {
+    sender_t snd = make(STRAT_HARQ, 1000);
+    CHECK_EQ_INT(snd.max_retries, SENDER_MAX_RETRIES);
+    sender_begin_frame(&snd, 1);
+    int max_attempt = 0, tx = 1;
+    while (sender_on_timeout(&snd) == SEND_RETRY) {
+        if (snd.attempt > max_attempt) max_attempt = snd.attempt;
+        tx++;
+    }
+    CHECK_EQ_INT(max_attempt, 255);
+    CHECK_EQ_INT(tx, 256);
+    snd = make(STRAT_HARQ, -3);
+    CHECK_EQ_INT(snd.max_retries, 0);
+}
+
+/* sender_init with a NULL code or NULL sender must not crash; a NULL code falls back to hamming74. */
+TEST(sender_init_null_arguments) {
+    sender_t snd;
+    sender_init(&snd, STRAT_HARQ, NULL, NULL, 4);
+    CHECK(snd.fixed.code == CODE_HAMMING74);
+    CHECK_EQ_INT(snd.max_retries, 4);
+    fec_config_t fc = fec_config(CODE_BCH157);
+    sender_init(NULL, STRAT_HARQ, &fc, NULL, 4);
+}
+
 int main(void) {
     RUN(feedback_roundtrip);
+    RUN(feedback_parse_rejects_out_of_range_fields);
     RUN(strategy_names);
     RUN(fec_never_waits_and_keeps_its_code);
     RUN(arq_sends_uncoded_with_crc_only);
     RUN(ack_finishes_nak_retries_until_limit);
     RUN(stale_and_duplicate_feedback_is_ignored);
     RUN(timeout_gives_up_after_max_retries);
+    RUN(max_retries_clamped_to_wire_range);
+    RUN(sender_init_null_arguments);
     return TEST_REPORT();
 }

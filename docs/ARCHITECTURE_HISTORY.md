@@ -749,6 +749,7 @@ one in the linear history.
 | `docs-timings` | `docs/demo-timings` | v0.4: measured demo timings | `53c6109` |
 | `docs-architecture` | `docs/architecture-history` | v0.4: this document | `da7d6b3`..`a7f5d68` |
 | - | `chore/professional-cleanup` (new) | v0.4: documentation cleanup (CONTRIBUTING, ALGORITHMS, DEVELOPMENT, DD records, renames) | `93e4448`.. (tip = tag `v0.4.0`) |
+| `claude/ecstatic-ptolemy-lmqezn` | `feature/viva-demo-runner` | v0.4: `tools/present.sh`, one-script viva demo (preflight, three-process run with packet capture, adaptive FEC, dashboard, comparison, plots) | `ad19693`.. |
 
 | tag | commit | meaning |
 |---|---|---|

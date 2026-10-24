@@ -10,13 +10,29 @@ re-reads that file on every poll and serves a projector-friendly page:
 Page: CORRECT / DETECTED_FAIL / SILENT_WRONG counters, recent frames (bits flipped by the channel
 vs bits corrected by the decoder), code level over time on top of the channel profile, latency.
 """
+# Input: the tollgate's --jsonl file, JSON lines, one per received transmission, flushed per line:
+#   {"seq":u32,"attempt":int,"code":str,"level":int,"flipped":int,"corrected":int,
+#    "crc_ok":bool,"class":"CORRECT"|"DETECTED_FAIL"|"SILENT_WRONG","lat_us":float,
+#    "profile":str,"strategy":str}
+# "level" is the position in the adaptive ladder (see LADDER), -1 when the code is not on it.
+# "lat_us" is decode time in microseconds. "attempt" is 0 for the first transmission of a seq.
+#
+# HTTP (no other paths are served, so no filesystem path is derived from the request):
+#   GET /, /index.html  the page (PAGE below); it polls api/state every 500 ms
+#   GET /api/state      summarize() of the whole file as JSON; any query string is ignored
+# Every poll re-reads and re-parses the entire file, so cost grows with the log size.
+# There is no authentication; with --host other than loopback the log summary is readable by
+# anyone who can reach the port. --once prints the same JSON as /api/state and exits.
 import argparse
 import json
 import os
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+# Must match the class names written by the tollgate (frame_class_name()).
 CLASSES = ("CORRECT", "DETECTED_FAIL", "SILENT_WRONG")
+# Indexed by the "level" field. Names describe the default (mixed) ladder only, so under
+# --ladder rs the level text on the page does not match the code actually in use.
 LADDER = ["L0 uncoded", "L1 Hamming(7,4)", "L2 BCH(15,7)", "L3 BCH(31,16)",
           "L4 RS t=4", "L5 RS t=8"]
 
@@ -25,7 +41,17 @@ def summarize(lines, recent=40, max_levels=600):
     """Aggregate JSON lines (one per transmission) into the dashboard state.
 
     A frame (seq) may be transmitted several times (ARQ/HARQ/adaptive); its final class is the
-    class of its first accepted copy, or DETECTED_FAIL if no copy passed the CRC."""
+    class of its first accepted copy, or DETECTED_FAIL if no copy passed the CRC.
+
+    Returned keys: transmissions, frames (distinct seq), retransmissions (their difference),
+    counts (per class, by final class of each frame), recent (last `recent` transmissions,
+    trimmed to seq/attempt/flipped/corrected/class/level), levels (last `max_levels`
+    [seq, level, profile] triples, one per frame), level/code/profile/strategy (from the last
+    line), mean_lat_us (over all transmissions) and ladder.
+
+    Malformed JSON lines are skipped (also covers a half-written last line), as are valid JSON
+    that is not an object and lines with a non-numeric lat_us or an unhashable seq. Frames are keyed by seq alone, so a log that
+    spans several runs (seq restarting at 0) is merged into one set of frames."""
     final = {}            # seq -> class
     order = []            # seqs in arrival order
     tx, lat_sum = [], 0.0
@@ -38,11 +64,19 @@ def summarize(lines, recent=40, max_levels=600):
             r = json.loads(raw)
         except ValueError:
             continue
+        if not isinstance(r, dict):      # e.g. a bare 42 or [1]
+            continue
         seq, cls = r.get("seq"), r.get("class", "DETECTED_FAIL")
+        try:
+            lat = float(r.get("lat_us", 0.0))
+        except (TypeError, ValueError):  # non-numeric lat_us: skip the whole line
+            continue
+        if isinstance(seq, (list, dict)):    # unhashable seq cannot key a frame
+            continue
         tx.append(r)
-        lat_sum += float(r.get("lat_us", 0.0))
+        lat_sum += lat
         if seq not in final:
-            final[seq] = cls
+            final[seq] = cls          # class of the first copy seen
             order.append(seq)
             levels.append([seq, r.get("level", -1), r.get("profile", "?")])
         elif final[seq] == "DETECTED_FAIL":
@@ -70,6 +104,8 @@ def summarize(lines, recent=40, max_levels=600):
 
 
 def load(path, **kw):
+    """Summary of the file at `path`; a missing or unreadable file gives the empty summary.
+    Only OSError is caught, so a file that is not valid UTF-8 raises."""
     try:
         with open(path) as f:
             return summarize(f.readlines(), **kw)
@@ -77,6 +113,8 @@ def load(path, **kw):
         return summarize([], **kw)
 
 
+# The page is served verbatim as a Python raw string. Its layout assumes recent=40 (40 bar slots)
+# and the 6-entry LADDER, so changing either in summarize() needs a matching change below.
 PAGE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -206,8 +244,10 @@ tick(); setInterval(tick, 500);
 
 
 def make_handler(log_path):
+    """Request handler class bound to one log file path."""
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
+            """Serve the page, /api/state (prefix match) or 404; always no-store, never cached."""
             if self.path.startswith("/api/state"):
                 body, ctype = json.dumps(load(log_path)).encode(), "application/json"
             elif self.path in ("/", "/index.html"):
@@ -228,6 +268,9 @@ def make_handler(log_path):
 
 
 def main():
+    """Parse arguments, then print the state once (--once) or serve until Ctrl-C.
+    A --port outside 0-65535 or one that cannot be bound (e.g. in use) prints a one-line error
+    and exits with status 1."""
     ap = argparse.ArgumentParser(description="Live FEC link dashboard")
     ap.add_argument("--log", default="results/tmp/live.jsonl", help="tollgate --jsonl file")
     ap.add_argument("--host", default="127.0.0.1")
@@ -237,7 +280,11 @@ def main():
     if a.once:
         print(json.dumps(load(a.log), indent=1))
         return
-    server = ThreadingHTTPServer((a.host, a.port), make_handler(a.log))
+    try:
+        server = ThreadingHTTPServer((a.host, a.port), make_handler(a.log))
+    except (OverflowError, OSError) as e:    # port out of range, in use, bad host
+        print(f"dashboard: cannot listen on {a.host}:{a.port}: {e}", file=sys.stderr)
+        return 1
     print(f"[DASHBOARD] open http://{a.host}:{a.port}/   (reading {a.log}, Ctrl-C to stop)", flush=True)
     try:
         server.serve_forever()

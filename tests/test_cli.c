@@ -1,4 +1,9 @@
-/* Tests for the shared command-line parser. */
+/*
+ * Tests cli.c: flag parsing shared by vehicle, channel, tollgate and bench, and the derived
+ * noise / controller parameters.
+ * A failure means a flag is ignored or mis-ranged, a bad value is accepted instead of rejected,
+ * or the same command line would configure the separate processes differently.
+ */
 #include <string.h>
 #include "testlib.h"
 #include "cli.h"
@@ -8,6 +13,7 @@ static int parse(cli_opts_t *o, int argc, const char **argv) {
     return cli_parse(o, argc, (char **)argv);
 }
 
+/* Documented defaults (code, profile, ports, count, seed) are what a bare command line gets. */
 TEST(defaults) {
     cli_opts_t o;
     cli_defaults(&o);
@@ -22,6 +28,7 @@ TEST(defaults) {
     CHECK_EQ_INT(o.seed, 1);
 }
 
+/* Each shared flag sets its field, including the --flag=value form; --model marks model_set. */
 TEST(common_flags) {
     const char *argv[] = {"x", "--code", "secded84", "--profile", "hospital", "--model", "burst",
                           "--p", "0.25", "--seed", "77", "--count", "5", "--delay-ms", "10",
@@ -39,6 +46,7 @@ TEST(common_flags) {
     CHECK_EQ_INT(o.burst_len, 9);
 }
 
+/* Without --model the noise model follows the profile; an explicit --model with --burst-len overrides the profile's burst length. */
 TEST(model_defaults_to_profile_model) {
     const char *argv[] = {"x", "--profile", "hospital"};
     cli_opts_t o;
@@ -52,6 +60,7 @@ TEST(model_defaults_to_profile_model) {
     CHECK_EQ_INT(np.burst.length, 7);
 }
 
+/* Error paths: unknown code, probability above 1, unknown flag, missing value, trailing junk in an integer. */
 TEST(rejects_bad_input) {
     fprintf(stderr, "    (6 error messages expected below)\n");
     cli_opts_t o;
@@ -67,6 +76,26 @@ TEST(rejects_bad_input) {
     CHECK(parse(&o, 3, a5) != 0);
 }
 
+/* A value-taking flag followed by another "--" flag is a missing value (not a file named "--quiet");
+ * the "=" form still accepts such a value. Checked for every string option. */
+TEST(value_flag_does_not_swallow_next_flag) {
+    fprintf(stderr, "    (7 error messages expected below)\n");
+    cli_opts_t o;
+    const char *names[] = {"--log", "--summary-file", "--out", "--schedule", "--trace", "--jsonl",
+                           "--compare-codes"};
+    for (size_t i = 0; i < sizeof names / sizeof names[0]; i++) {
+        const char *a[] = {"x", names[i], "--quiet"};
+        CHECK(parse(&o, 3, a) != 0);
+    }
+    const char *ok[] = {"x", "--log=--quiet"};
+    CHECK_EQ_INT(parse(&o, 2, ok), 0);
+    CHECK(o.log_path != NULL && strcmp(o.log_path, "--quiet") == 0);
+    const char *norm[] = {"x", "--log", "run.csv", "--quiet"};
+    CHECK_EQ_INT(parse(&o, 4, norm), 0);
+    CHECK(strcmp(o.log_path, "run.csv") == 0 && o.quiet == 1);
+}
+
+/* Retransmission and controller flags reach cli_opts_t and adapt_params_t; an unknown strategy is rejected. */
 TEST(strategy_and_adaptive_flags) {
     cli_opts_t o;
     cli_defaults(&o);
@@ -92,6 +121,7 @@ TEST(strategy_and_adaptive_flags) {
     CHECK(parse(&o, 3, bad) != 0);
 }
 
+/* --corrupt-header defaults to 0 (header never corrupted) and is range-checked as a probability. */
 TEST(failure_injection_flags) {
     cli_opts_t o;
     cli_defaults(&o);
@@ -104,6 +134,7 @@ TEST(failure_injection_flags) {
     CHECK(parse(&o, 3, bad) != 0);
 }
 
+/* --seeds below 2 is rejected because a confidence interval needs at least two samples. */
 TEST(seeds_flag) {
     cli_opts_t o;
     cli_defaults(&o);
@@ -116,6 +147,7 @@ TEST(seeds_flag) {
     CHECK(parse(&o, 3, bad) != 0);
 }
 
+/* --ladder is parsed into the options only; the process-wide ladder selection stays untouched. */
 TEST(ladder_flag) {
     cli_opts_t o;
     cli_defaults(&o);
@@ -129,6 +161,7 @@ TEST(ladder_flag) {
     CHECK(parse(&o, 3, bad) != 0);
 }
 
+/* The ldpc code name and the --compare-codes list are accepted; the list is stored as given. */
 TEST(ldpc_code_and_compare_codes_flag) {
     cli_opts_t o;
     cli_defaults(&o);
@@ -139,6 +172,7 @@ TEST(ldpc_code_and_compare_codes_flag) {
     CHECK(o.compare_codes && strcmp(o.compare_codes, "bch3116,ldpc") == 0);
 }
 
+/* --channel-port and --tollgate-port override the 9000/9001 defaults (--feedback-port is not covered). */
 TEST(ports) {
     const char *argv[] = {"x", "--channel-port", "19000", "--tollgate-port", "19001"};
     cli_opts_t o;
@@ -152,6 +186,7 @@ int main(void) {
     RUN(common_flags);
     RUN(model_defaults_to_profile_model);
     RUN(rejects_bad_input);
+    RUN(value_flag_does_not_swallow_next_flag);
     RUN(strategy_and_adaptive_flags);
     RUN(failure_injection_flags);
     RUN(seeds_flag);

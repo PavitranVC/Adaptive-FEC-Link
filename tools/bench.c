@@ -34,10 +34,16 @@
  *   <out>_diff.csv: PAIRED differences adaptive - HARQ+RS t=8 and adaptive - HARQ+RS t=4 on the
  *   same seeds (mean, 95% CI, significant = CI excludes 0). Without --seeds nothing changes.
  *
+ * Exit codes: 0 = done or --help, 1 = an output file could not be opened, 2 = bad command line,
+ * unknown/invalid --compare-codes entry or unparsable --schedule. On exit code 2 after the
+ * output file was opened, that file is left holding the header and any rows written so far.
+ * Output paths default to results/ and the directory must already exist (fopen does not create it).
+ *
  * --ladder rs (v0.3, a NEW pre-registered experiment, DD-24): the adaptive row uses the all-RS ladder
  *   (code "ladder_rs"); in --seeds mode the original mixed-ladder adaptive row is added on the
  *   same seeds and <out>_diff.csv also holds adaptive_rs - adaptive_mixed. Default: mixed.
  */
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "cli.h"
@@ -46,12 +52,16 @@
 #include "sim.h"
 #include "stats.h"
 
+/* Sweep grids, one entry per CSV row per code. The rate-style values are plain doubles;
+ * BURST_L values are lengths in bits and are truncated to int in point_params(). */
 static const double BSC_P[] = {0.0005, 0.001, 0.002, 0.005, 0.01, 0.015, 0.02, 0.03, 0.05, 0.07, 0.1};
 static const double GE_PGB[] = {0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05};
 static const double BURST_L[] = {1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32};
 
 #define COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
+/* For the burst model the profile's "p" argument is the per-frame burst probability, so
+ * passing 1.0 gives the documented one-burst-in-every-frame sweep; "param" is then the length. */
 static noise_params_t point_params(const profile_t *prof, noise_model_t m, double param) {
     noise_params_t np = profile_noise(prof, m, m == NOISE_BURST ? 1.0 : param);
     if (m == NOISE_BURST) np.burst.length = (int)param;
@@ -63,6 +73,8 @@ typedef struct {
     fec_config_t cfg;
 } variant_t;
 
+/* One CSV row per (variant, model, param). Rates are fractions of r.frames (never 0 here,
+ * --frames is validated >= 1). All variants share --seed, so rows are comparable across codes. */
 static void run_point(FILE *csv, const cli_opts_t *o, const variant_t *v, noise_model_t m,
                       double param) {
     noise_params_t np = point_params(o->profile, m, param);
@@ -77,6 +89,9 @@ static void run_point(FILE *csv, const cli_opts_t *o, const variant_t *v, noise_
            r.silent_wrong / n, r.code_rate, r.mean_decode_us);
 }
 
+/* The options struct has no "was --code given" field, so this scans argv directly. It is a
+ * prefix match (also catches "--code=rs") and also matches a value that happens to start
+ * with the flag text. */
 static int has_flag(int argc, char **argv, const char *flag) {
     for (int i = 1; i < argc; i++)
         if (!strncmp(argv[i], flag, strlen(flag))) return 1;
@@ -85,16 +100,43 @@ static int has_flag(int argc, char **argv, const char *flag) {
 
 /* --compare-codes a,b,c: exactly these codes (no interleaved variants), in that order;
  * "rs_t8" = Reed-Solomon with t = 8 (plain "rs" uses --rs-t).
- * Returns the number of variants, -1 for an unknown code name. */
+ * "rs_t<N>" must be digits only (so "rs_t8x" is rejected); N is further checked by
+ * fec_config_valid() (unsupported t is rejected there).
+ * A list longer than the 256-byte buffer, more than `cap` entries or a name longer than the 31
+ * chars of variant_t.name is an error, never silently cut.
+ * Returns the number of variants, -1 for an unknown, invalid or too long code name or list. */
 static int compare_variants(const cli_opts_t *o, variant_t *vs, int cap) {
     char list[256];
     int nv = 0;
+    /* Reject what would be truncated or dropped below. */
+    if (strlen(o->compare_codes) >= sizeof list) {
+        fprintf(stderr, "error: --compare-codes list longer than %d characters\n",
+                (int)sizeof list - 1);
+        return -1;
+    }
     snprintf(list, sizeof list, "%s", o->compare_codes);
-    for (char *name = strtok(list, ","); name && nv < cap; name = strtok(NULL, ",")) {
+    for (char *name = strtok(list, ","); name; name = strtok(NULL, ",")) {
         code_id_t code;
         int t = o->rs_t;
-        if (!strncmp(name, "rs_t", 4) && sscanf(name + 4, "%d", &t) == 1) code = CODE_RS;
-        else if (fec_code_from_name(name, &code)) {
+        if (nv >= cap) {
+            fprintf(stderr, "error: more than %d codes in --compare-codes\n", cap);
+            return -1;
+        }
+        if (strlen(name) >= sizeof vs[nv].name) {
+            fprintf(stderr, "error: code name '%s' in --compare-codes is longer than %d characters\n",
+                    name, (int)sizeof vs[nv].name - 1);
+            return -1;
+        }
+        if (!strncmp(name, "rs_t", 4) && name[4] >= '0' && name[4] <= '9') {
+            char *end;
+            long tv = strtol(name + 4, &end, 10);
+            if (*end || tv > 255) {      /* trailing text such as "rs_t8x", or absurd t */
+                fprintf(stderr, "error: invalid code '%s' in --compare-codes\n", name);
+                return -1;
+            }
+            t = (int)tv;
+            code = CODE_RS;
+        } else if (fec_code_from_name(name, &code)) {
             fprintf(stderr, "error: unknown code '%s' in --compare-codes\n", name);
             return -1;
         }
@@ -110,6 +152,8 @@ static int compare_variants(const cli_opts_t *o, variant_t *vs, int cap) {
     return nv;
 }
 
+/* Default sweep: every registered code (LDPC only if selected with --code), plus a "+il<D>"
+ * variant for Hamming(7,4) and BCH(31,16). Result must fit the caller's 16-entry array. */
 static int build_variants(const cli_opts_t *o, int only_code, variant_t *vs) {
     int nv = 0, depth = o->interleave > 1 ? o->interleave : 8;
     for (int ci = 0; ci < fec_code_count(); ci++) {
@@ -137,6 +181,7 @@ static int build_variants(const cli_opts_t *o, int only_code, variant_t *vs) {
 
 /* ---------------------------------------------------------------- strategy comparison ---- */
 
+/* strat_row_t.rs_t is used only for CODE_RS rows. */
 /* ladder (adaptive only): 0 = the ladder chosen with --ladder, LADDER_x + 1 = that ladder */
 typedef struct { const char *label; strategy_t strategy; code_id_t code; int rs_t; int ladder; } strat_row_t;
 
@@ -153,6 +198,7 @@ static const strat_row_t STRAT_ROWS[] = {
     {"adaptive", STRAT_ADAPTIVE, CODE_NONE, 4, 0},
 };
 
+/* Parameters common to every row; the channel (nseg/seg[]) is filled in separately. */
 static void base_params(const cli_opts_t *o, linksim_params_t *lp) {
     linksim_defaults(lp);
     lp->adapt = cli_adapt_params(o);
@@ -164,6 +210,7 @@ static void base_params(const cli_opts_t *o, linksim_params_t *lp) {
     lp->seed = o->seed;
 }
 
+/* Single-segment channel; the last segment lasts forever, so its frames field is unused. */
 static void profile_channel(const profile_t *prof, linksim_params_t *lp) {
     lp->nseg = 1;
     lp->seg[0].noise = profile_noise(prof, prof->default_model, -1.0);
@@ -171,6 +218,8 @@ static void profile_channel(const profile_t *prof, linksim_params_t *lp) {
     lp->seg[0].label = prof->label;
 }
 
+/* ladder_select() sets process-wide state in the adaptive controller, so run_row() restores
+ * g_ladder after each run; nothing here may run rows concurrently. */
 static ladder_id_t g_ladder = LADDER_MIXED;   /* --ladder */
 
 static ladder_id_t row_ladder(const strat_row_t *row) {
@@ -207,6 +256,9 @@ static void strategy_row(FILE *csv, const char *channel, linksim_params_t *lp,
            r.mean_code_rate, r.goodput);
 }
 
+/* Single-seed comparison. --profile is ignored: both built-in profiles are always run, each
+ * on its default noise model. --model and --p only reach the optional --schedule channel.
+ * A bad --schedule is detected only after the two profile channels were written. */
 static int run_strategies(const cli_opts_t *o) {
     const char *path = o->out_path ? o->out_path : "results/bench_strategy.csv";
     FILE *csv = fopen(path, "w");
@@ -236,7 +288,7 @@ static int run_strategies(const cli_opts_t *o) {
         for (size_t i = 0; i < sizeof STRAT_ROWS / sizeof STRAT_ROWS[0]; i++) {
             FILE *trace = NULL;
             if (STRAT_ROWS[i].strategy == STRAT_ADAPTIVE && o->trace_path)
-                trace = fopen(o->trace_path, "w");
+                trace = fopen(o->trace_path, "w");   /* failure is not reported: no trace written */
             strategy_row(csv, "schedule", &lp, &STRAT_ROWS[i], trace);
             if (trace) { fclose(trace); printf("bench: wrote %s\n", o->trace_path); }
         }
@@ -253,7 +305,7 @@ static int run_strategies(const cli_opts_t *o) {
 /* With --ladder rs the original (mixed) adaptive row is run too, on the same seeds, so that
  * "all-RS ladder minus mixed ladder" is a paired comparison (DD-24). */
 static const strat_row_t MIXED_ADAPTIVE_ROW = {"adaptive", STRAT_ADAPTIVE, CODE_NONE, 4, LADDER_MIXED + 1};
-#define MAX_CH 3
+#define MAX_CH 3         /* toll, hospital and the optional schedule channel */
 enum { M_SUCCESS, M_GOODPUT, M_RETX, M_P99, N_METRICS };
 static const char *const METRIC[N_METRICS] = {"success_rate", "goodput", "retx_per_frame",
                                               "p99_latency_ms"};
@@ -267,6 +319,8 @@ static double metric_of(const linksim_result_t *r, int m) {
     }
 }
 
+/* Index of the row matching strategy and code; rs_t is compared only for RS rows and the
+ * ladder only for adaptive rows. Returns -1 if absent (callers assume it is present). */
 static int find_row(const strat_row_t *rows, int nrows, strategy_t s, code_id_t code, int rs_t,
                     ladder_id_t ladder) {
     for (int i = 0; i < nrows; i++)
@@ -277,9 +331,12 @@ static int find_row(const strat_row_t *rows, int nrows, strategy_t s, code_id_t 
     return -1;
 }
 
-/* "results/x.csv" + "_raw" -> "results/x_raw.csv" */
+/* "results/x.csv" + "_raw" -> "results/x_raw.csv". The extension is looked for only after the
+ * last '/', so a dot in a directory name ("out.d/run") is not taken as the extension.
+ * Output is truncated silently to `cap` bytes. */
 static void sibling_path(const char *path, const char *suffix, char *out, size_t cap) {
-    const char *dot = strrchr(path, '.');
+    const char *slash = strrchr(path, '/');
+    const char *dot = strrchr(slash ? slash : path, '.');
     size_t stem = dot ? (size_t)(dot - path) : strlen(path);
     snprintf(out, cap, "%.*s%s%s", (int)stem, path, suffix, dot ? dot : "");
 }
@@ -291,7 +348,8 @@ static FILE *open_csv(const char *path, const char *header) {
     return f;
 }
 
-/* Paired difference a - b over the same seeds, for every metric. */
+/* Paired difference a - b over the same seeds, for every metric. n <= 1000 because of the
+ * fixed-size d[] (cli.c limits --seeds to 1000). significant = 95% CI does not contain 0. */
 static void write_diffs(FILE *f, const char *channel, linksim_result_t *ra, linksim_result_t *rb,
                         const char *a, const char *b, int n) {
     double d[1000];
@@ -306,6 +364,10 @@ static void write_diffs(FILE *f, const char *channel, linksim_result_t *ra, link
     }
 }
 
+/* Multi-seed comparison; writes three files (see header). Seeds are seed..seed+n-1, and every
+ * (channel, row) pair is simulated once per seed, so cost is channels x rows x n runs.
+ * --trace is not honoured in this mode (run_row gets a NULL trace). All results are kept in
+ * the static array below (MAX_CH x MAX_ROWS x 1000) until the summary files are written. */
 static int run_strategies_seeds(const cli_opts_t *o) {
     const char *path = o->out_path ? o->out_path : "results/bench_strategy_seeds.csv";
     char raw_path[512], diff_path[512];
@@ -381,6 +443,8 @@ static int run_strategies_seeds(const cli_opts_t *o) {
 
     FILE *diff = open_csv(diff_path, "channel,a,b,metric,seeds,mean_diff,ci95,lo,hi,significant");
     if (!diff) return 1;
+    /* Paired comparisons: ad = adaptive under the chosen ladder, mx = the mixed-ladder adaptive
+     * row (same row as ad unless --ladder rs, in which case that extra comparison is added). */
     int ad = find_row(rows, nrows, STRAT_ADAPTIVE, CODE_NONE, 4, g_ladder),
         h8 = find_row(rows, nrows, STRAT_HARQ, CODE_RS, 8, g_ladder),
         h4 = find_row(rows, nrows, STRAT_HARQ, CODE_RS, 4, g_ladder),
@@ -401,10 +465,11 @@ int main(int argc, char **argv) {
     cli_opts_t o;
     cli_defaults(&o);
     int rc = cli_parse(&o, argc, argv);
-    if (rc) return rc > 0 ? 0 : 2;
+    if (rc) return rc > 0 ? 0 : 2;     /* cli_parse: 1 = --help printed, -1 = error */
     g_ladder = o.ladder;
     ladder_select(g_ladder);
     if (o.strategies) return o.seeds > 0 ? run_strategies_seeds(&o) : run_strategies(&o);
+    /* --compare-codes takes precedence over --code and over the interleaved variants. */
     int only_code = has_flag(argc, argv, "--code"), only_model = o.model_set;
     const char *path = o.out_path ? o.out_path : "results/bench.csv";
     FILE *csv = fopen(path, "w");

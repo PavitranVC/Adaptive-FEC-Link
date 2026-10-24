@@ -10,6 +10,11 @@
  *   inject --port P fbgarbage   200 malformed feedback packets (for the vehicle's port 9002)
  *
  * Prints one line per category: "<name> <count>", so the test knows what to expect.
+ *
+ * test_failure.sh compares the receiver's log and summary counts against these numbers exactly,
+ * so all random content is seeded: a changed seed or packet list changes what the test expects.
+ * A scenario sending the wrong number of packets, or one that the receiver accepts as valid,
+ * would show up there as a count mismatch, not here.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +27,7 @@
 
 static int g_fd, g_port;
 
+/* Sends one datagram; the pause keeps loopback ordering so the duplicate/late-copy cases are deterministic. */
 static void send_raw(const uint8_t *buf, size_t len) {
     net_sendto(g_fd, "127.0.0.1", g_port, buf, len);
     sleep_us(2000);   /* keep the order on loopback and let the receiver log */
@@ -49,6 +55,8 @@ static size_t valid_packet(uint32_t seq, uint8_t *wire, size_t cap) {
     return packet_serialize(&p, wire, cap);
 }
 
+/* Malformed-input paths of packet_parse and the receiver's code/size check, then valid traffic,
+ * a duplicate and a stale copy to exercise de-duplication. Counts printed here are test_failure.sh's oracle. */
 static void scenario_malformed(void) {
     static uint8_t wire[PACKET_MAX_BYTES], bad[PACKET_MAX_BYTES];
     rng_t r;
@@ -80,7 +88,8 @@ static void scenario_malformed(void) {
     memcpy(bad, wire, len);                             /* unknown code id, length still valid */
     bad[4] = 99;
     send_raw(bad, len);
-    printf("garbage %d\nmalformed %d\ninvalid 1\n", garbage, malformed);
+    malformed++;                                        /* packet_parse rejects the header itself */
+    printf("garbage %d\nmalformed %d\ninvalid 0\n", garbage, malformed);
 
     send_raw(wire, len);                                /* seq 0 */
     send_raw(wire, len);                                /* exact duplicate of seq 0 */
@@ -90,6 +99,8 @@ static void scenario_malformed(void) {
     printf("valid 2\nduplicates 2\n");                  /* ... and no END: the END is "lost" */
 }
 
+/* Feedback parser robustness: random lengths 0..63, half with a correct "FB" prefix so they get
+ * past the magic check. Fixed length 22 (FEEDBACK_BYTES) with bad version/type is not forced. */
 static void scenario_fbgarbage(void) {
     uint8_t bad[64];
     rng_t r;

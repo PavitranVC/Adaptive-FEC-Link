@@ -5,17 +5,82 @@
 #   sh tools/demo.sh --profile toll --code hamming74 --count 20 --delay-ms 250 [more flags]
 #
 # Output lines are prefixed [VEHICLE] / [CHANNEL] / [TOLLGATE] by the programs themselves.
+#
+# Environment: BIN (binary directory, default bin; prepended with "./", so it should be
+# relative to the repo root), SHOWBITS (0 = omit --show-bits for the tollgate).
+# Every argument is passed unchanged to all three programs. The script appends its own
+# --show-bits, --log and --summary-file to the tollgate and --log to the channel AFTER "$@",
+# so a --log or --summary-file given by the caller is overridden (the last occurrence wins).
+# Files written: results/tmp/{tollgate.csv,summary.txt,channel.csv}.
+# Exit status: that of the vehicle if it failed, else that of the tollgate, 1 if a binary is
+# missing or a port is in use, 2 for a bad --count/--idle-timeout-ms, 130 if interrupted.
+# The tollgate and channel stop only on their idle timeout (--idle-timeout-ms, default 10 s,
+# counted from the first packet), so the script returns that long after the vehicle ends.
+# --count and --idle-timeout-ms must be positive integers (0 would wait forever): exit 2.
 cd "$(dirname "$0")/.." || exit 1
 BIN=${BIN:-bin}      # make sanitize sets BIN=build/asan/bin
 SHOWBITS=${SHOWBITS:-1}   # 0 = no per-frame bit maps (make demo-arq / demo-harq default)
+# $SB is deliberately expanded unquoted below: empty means "no argument", not "".
 SB="--show-bits"; [ "$SHOWBITS" = 0 ] && SB=""
+# --count 0 / --idle-timeout-ms 0 (or any non-positive or non-numeric value) would leave the
+# receivers waiting forever, so reject them before anything is started.
+prev=""
+for a in "$@"; do
+    case $prev in
+    --count|--idle-timeout-ms)
+        case $a in
+        ''|*[!0-9]*) echo "$prev must be a positive integer (got '$a')" >&2; exit 2 ;;
+        esac
+        [ "$a" -gt 0 ] || { echo "$prev must be a positive integer (got '$a')" >&2; exit 2; }
+        ;;
+    esac
+    prev=$a
+done
+
 mkdir -p results/tmp
 
 for b in $BIN/tollgate $BIN/channel $BIN/vehicle; do
     [ -x "$b" ] || { echo "missing $b - run 'make' first" >&2; exit 1; }
 done
 
+# A UDP port that is already bound (an old run still alive) goes unnoticed otherwise and shows
+# up only as lost frames. Checks the three ports (flag values from "$@", else 9000-9002) with
+# ss, else /proc/net/udp; if neither is available the check is skipped.
+port_busy() {
+    if command -v ss >/dev/null 2>&1; then
+        ss -uln 2>/dev/null | awk -v p=":$1" '{ n = length($4) - length(p) + 1; if (n > 0 && substr($4, n) == p) f = 1 } END { exit !f }'
+    elif [ -r /proc/net/udp ]; then      # udp6 may be absent: list only readable files
+        h=$(printf '%04X' "$1")
+        awk -v h=":$h" '{ n = length($2) - 4; if (n > 0 && substr($2, n) == h) f = 1 } END { exit !f }' /proc/net/udp $(ls /proc/net/udp6 2>/dev/null)
+    else
+        return 1
+    fi
+}
+cp=9000; tp=9001; fp=9002; prev=""
+for a in "$@"; do
+    case $prev in
+    --channel-port) cp=$a ;;
+    --tollgate-port) tp=$a ;;
+    --feedback-port) fp=$a ;;
+    esac
+    prev=$a
+done
+for p in $cp $tp $fp; do
+    case $p in ''|*[!0-9]*) continue ;; esac     # not a number: the programs report it
+    if port_busy "$p"; then
+        echo "UDP port $p is already in use - an old run may still be alive." >&2
+        echo "List it: pgrep -fl \"bin/(vehicle|channel|tollgate)\"; stop it by PID: kill <pid>" >&2
+        echo "(or use other ports: --channel-port/--tollgate-port/--feedback-port)" >&2
+        exit 1
+    fi
+done
+
+# Receiver-first start order matters: the programs use UDP, so a datagram sent before its
+# receiver has bound its port is lost. Flow is vehicle -> channel -> tollgate, hence tollgate
+# first. The 0.3 s sleeps are a fixed grace period, not a readiness check; ports that are already
+# in use are caught before starting (see port_busy), other bind failures show up as lost frames.
 TG=""; CH=""
+# Stops the background receivers; does not wait for them.
 cleanup() {
     [ -n "$CH" ] && kill "$CH" 2>/dev/null
     [ -n "$TG" ] && kill "$TG" 2>/dev/null
@@ -32,12 +97,14 @@ CH=$!
 sleep 0.3
 ./$BIN/vehicle "$@"
 VRC=$?
+# A failed vehicle (bad flags, socket error) must not leave the receivers waiting for their
+# idle timeout, so they are killed and the vehicle's status is returned.
 if [ "$VRC" -ne 0 ]; then
     echo "vehicle failed (exit $VRC) - stopping the other processes" >&2
     cleanup
     exit "$VRC"
 fi
-wait "$CH"
+wait "$CH"      # status ignored; only the tollgate's status is reported
 wait "$TG"
 TRC=$?
 echo "=== demo finished - per-frame logs: results/tmp/tollgate.csv, results/tmp/channel.csv ==="

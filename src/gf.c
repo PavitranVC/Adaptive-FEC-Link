@@ -2,6 +2,7 @@
 
 int gf_init(gf_t *f, int m, unsigned poly) {
     if (m < 2 || m > 8 || !(poly & (1u << m))) return -1;
+    if (poly >> (m + 1)) return -1;   /* rejects a polynomial wider than m+1 bits (would overrun log[]/exp[]) */
     f->m = m;
     f->n = (1 << m) - 1;
     f->poly = poly;
