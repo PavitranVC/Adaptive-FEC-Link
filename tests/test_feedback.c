@@ -6,6 +6,7 @@
  */
 #include <string.h>
 #include "testlib.h"
+#include "adapt.h"
 #include "feedback.h"
 #include "sender.h"
 
@@ -28,6 +29,29 @@ TEST(feedback_roundtrip) {
     CHECK(feedback_parse(wire, FEEDBACK_BYTES - 1, &g) != 0);   /* truncated */
     wire[0] = 'X';
     CHECK(feedback_parse(wire, FEEDBACK_BYTES, &g) != 0);       /* bad magic */
+}
+
+/* Out-of-range level, win_fail > win_n and oversized win_n are refused; boundary values and level 255 pass. */
+TEST(feedback_parse_rejects_out_of_range_fields) {
+    feedback_t f, g;
+    memset(&f, 0, sizeof f);
+    f.type = FB_NAK;
+    f.win_n = 32; f.win_fail = 32; f.level = (uint8_t)(ladder_levels() - 1);
+    uint8_t w[FEEDBACK_BYTES];
+    CHECK_EQ_INT(feedback_serialize(&f, w, sizeof w), FEEDBACK_BYTES);
+    CHECK(feedback_parse(w, sizeof w, &g) == 0);          /* win_fail == win_n, top level */
+    f.level = FEEDBACK_NO_LEVEL;
+    feedback_serialize(&f, w, sizeof w);
+    CHECK(feedback_parse(w, sizeof w, &g) == 0);
+    f.level = (uint8_t)ladder_levels();
+    feedback_serialize(&f, w, sizeof w);
+    CHECK(feedback_parse(w, sizeof w, &g) != 0);          /* level past the ladder */
+    f.level = 0; f.win_fail = 33;
+    feedback_serialize(&f, w, sizeof w);
+    CHECK(feedback_parse(w, sizeof w, &g) != 0);          /* rate > 1 */
+    f.win_n = FEEDBACK_MAX_WINDOW + 1; f.win_fail = 0;
+    feedback_serialize(&f, w, sizeof w);
+    CHECK(feedback_parse(w, sizeof w, &g) != 0);
 }
 
 /* CLI strategy names map both ways and an unknown name is refused (--strategy input). */
@@ -130,6 +154,7 @@ TEST(max_retries_clamped_to_wire_range) {
 
 int main(void) {
     RUN(feedback_roundtrip);
+    RUN(feedback_parse_rejects_out_of_range_fields);
     RUN(strategy_names);
     RUN(fec_never_waits_and_keeps_its_code);
     RUN(arq_sends_uncoded_with_crc_only);
