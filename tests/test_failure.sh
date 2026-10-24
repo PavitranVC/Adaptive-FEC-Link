@@ -45,8 +45,7 @@ garbage=$(awk '$1=="garbage"{print $2}' $T.inj); malformed=$(awk '$1=="malformed
 check "every garbage/truncated/bad-magic/version/type/nbits packet logged" \
     [ "$(count 'ignoring malformed packet' $T.tg)" -eq $((garbage + malformed)) ]
 check "malformed counted in summary" [ "$(val $T.sum malformed)" -eq $((garbage + malformed)) ]
-check "unknown code id logged and dropped" grep -q 'dropping frame seq=0 with unknown code/size' $T.tg
-check "invalid counted in summary" [ "$(val $T.sum invalid)" -eq 1 ]
+check "unknown code id rejected by packet_parse (counted as malformed above, not invalid)" [ "$(val $T.sum invalid)" -eq 0 ]
 check "the 2 valid frames are received" [ "$(val $T.sum received)" -eq 2 ]
 check "... and CORRECT (invalid packet did not steal seq 0)" [ "$(val $T.sum correct)" -eq 2 ]
 check "duplicate seq + late copy ignored" [ "$(val $T.sum duplicates)" -eq 2 ]
@@ -65,7 +64,6 @@ wait $CH; crc=$?
 wait $TG; trc=$?
 check "channel and tollgate exit 0" eval '[ "$crc" -eq 0 ] && [ "$trc" -eq 0 ]'
 check "channel logged the malformed packets" [ "$(count 'ignoring malformed packet' $T.ch)" -eq $((garbage + malformed)) ]
-check "channel dropped the unknown code" grep -q 'dropping malformed frame seq=0' $T.ch
 check "tollgate got only valid frames" eval '[ "$(val $T.sum malformed)" -eq 0 ] && [ "$(val $T.sum received)" -eq 2 ]'
 check "END forwarded: sent 2, lost 0" eval '[ "$(val $T.sum sent)" -eq 2 ] && [ "$(val $T.sum lost)" -eq 0 ]'
 

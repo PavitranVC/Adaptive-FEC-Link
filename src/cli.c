@@ -255,9 +255,9 @@ static int is_value_flag(const char *f) {
 }
 
 /* argv[0] is skipped. The first --help/-h stops parsing and returns 1; arguments before
- * it are still validated. In the two-argument form the next argv entry is always taken
- * as the value, even if it starts with "--" (e.g. "--log --quiet" logs to a file named
- * "--quiet"). */
+ * it are still validated. In the two-argument form a next argv entry that starts with "--" is
+ * not taken as the value (it is most likely the next flag, e.g. "--log --quiet"); a value that
+ * really starts with "--" must be written as "--flag=--value". */
 int cli_parse(cli_opts_t *o, int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
@@ -279,6 +279,13 @@ int cli_parse(cli_opts_t *o, int argc, char **argv) {
             if (i + 1 >= argc) {
                 if (is_value_flag(a)) fprintf(stderr, "error: %s needs a value\n", a);
                 else fprintf(stderr, "error: unknown flag '%s' (try --help)\n", a);
+                return -1;
+            }
+            /* Rejects "--flag --other": a value-taking flag followed by another "--" argument is
+             * a forgotten value, and would otherwise swallow the next flag (e.g. as a file name). */
+            if (is_value_flag(a) && !strncmp(argv[i + 1], "--", 2)) {
+                fprintf(stderr, "error: %s needs a value, got '%s' (write %s=VALUE if intended)\n",
+                        a, argv[i + 1], a);
                 return -1;
             }
             if (apply_flag(o, a, argv[++i])) return -1;

@@ -32,6 +32,7 @@ double rng_uniform(rng_t *r) {
 }
 
 uint32_t rng_below(rng_t *r, uint32_t n) {
+    if (n == 0) return 0;   /* empty range: avoid UINT64_MAX % 0 (SIGFPE) */
     /* rejection sampling: discard the top partial range so every value is equally likely */
     uint64_t limit = UINT64_MAX - (UINT64_MAX % n);
     uint64_t x;

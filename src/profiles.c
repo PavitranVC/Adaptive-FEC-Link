@@ -26,6 +26,7 @@ const profile_t PROFILE_HOSPITAL_IMAGING = {
 };
 
 const profile_t *profile_by_name(const char *name) {
+    if (!name) return NULL;     /* Rejects NULL (e.g. a missing option): strcmp would crash. */
     const profile_t *all[2] = {&PROFILE_TOLL_PLAZA, &PROFILE_HOSPITAL_IMAGING};
     for (int i = 0; i < 2; i++)
         if (strcmp(name, all[i]->name) == 0 || strcmp(name, all[i]->label) == 0) return all[i];

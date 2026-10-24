@@ -3,6 +3,7 @@
  * A failure means bench results (correct / detected / silent counts, code rate, reproducibility)
  * cannot be trusted, or a code no longer meets its guaranteed correction capability end to end.
  */
+#include <string.h>
 #include "testlib.h"
 #include "sim.h"
 
@@ -72,6 +73,26 @@ TEST(stronger_code_wins_on_random_errors) {
     CHECK(rb.correct > rh.correct);
 }
 
+/* An invalid configuration (unknown code, interleave 0, RS with t 0) yields an empty result instead of a crash. */
+TEST(invalid_config_fails_cleanly) {
+    noise_params_t np = noise_bsc(0.0);
+    sim_result_t r;
+    fec_config_t c = fec_config(CODE_HAMMING74);
+    c.code = (code_id_t)99;
+    memset(&r, 0xAB, sizeof r);
+    sim_run(&c, &np, 10, 1, &r);
+    CHECK_EQ_INT(r.frames, 0);
+    CHECK_EQ_INT(r.correct, 0);
+    c = fec_config(CODE_HAMMING74);
+    c.interleave = 0;
+    sim_run(&c, &np, 10, 1, &r);
+    CHECK_EQ_INT(r.frames, 0);
+    c = fec_config(CODE_RS);
+    c.rs_t = 0;
+    sim_run(&c, &np, 10, 1, &r);
+    CHECK_EQ_INT(r.frames, 0);
+}
+
 int main(void) {
     RUN(clean_channel_is_always_correct);
     RUN(uncoded_fails_whenever_a_bit_flips);
@@ -79,5 +100,6 @@ int main(void) {
     RUN(bch3116_fixes_any_burst_of_3);
     RUN(rates_add_up_and_runs_are_reproducible);
     RUN(stronger_code_wins_on_random_errors);
+    RUN(invalid_config_fails_cleanly);
     return TEST_REPORT();
 }

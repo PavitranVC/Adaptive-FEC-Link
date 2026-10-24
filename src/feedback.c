@@ -3,6 +3,7 @@
  * feedback.h). All multi-byte fields are big-endian.
  */
 #include <string.h>
+#include "adapt.h"
 #include "feedback.h"
 
 static void put32(uint8_t *b, uint32_t v) {
@@ -25,12 +26,18 @@ size_t feedback_serialize(const feedback_t *f, uint8_t *b, size_t cap) {
     return FEEDBACK_BYTES;
 }
 
-/* Accepts only an exact 22-byte datagram with magic "FB", version 1 and type ACK or NAK.
- * The numeric fields are taken as received: level and the window counters are not range-checked
- * here (win_fail may exceed win_n), so consumers such as adapt_update must tolerate that. */
+/* Accepts only an exact 22-byte datagram with magic "FB", version 1 and type ACK or NAK, whose
+ * level is a ladder level or FEEDBACK_NO_LEVEL and whose window counters are consistent
+ * (win_n <= FEEDBACK_MAX_WINDOW, win_fail <= win_n). f is not modified on failure. */
 int feedback_parse(const uint8_t *b, size_t len, feedback_t *f) {
     if (len != FEEDBACK_BYTES || b[0] != 'F' || b[1] != 'B' || b[2] != 1) return -1;
     if (b[3] != FB_ACK && b[3] != FB_NAK) return -1;
+    /* Rejects a level beyond the ladder and win_fail > win_n or an absurd win_n: such a window
+     * would give a failure rate above 1 and force the adaptive controller to step up. */
+    unsigned level = b[9], win_n = (unsigned)((b[10] << 8) | b[11]), win_fail = (unsigned)((b[12] << 8) | b[13]);
+    if ((level != FEEDBACK_NO_LEVEL && level >= (unsigned)ladder_levels()) ||
+        win_n > FEEDBACK_MAX_WINDOW || win_fail > win_n)
+        return -1;
     memset(f, 0, sizeof *f);
     f->type = b[3];
     f->seq = get32(b + 4);

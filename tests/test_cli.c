@@ -76,6 +76,25 @@ TEST(rejects_bad_input) {
     CHECK(parse(&o, 3, a5) != 0);
 }
 
+/* A value-taking flag followed by another "--" flag is a missing value (not a file named "--quiet");
+ * the "=" form still accepts such a value. Checked for every string option. */
+TEST(value_flag_does_not_swallow_next_flag) {
+    fprintf(stderr, "    (7 error messages expected below)\n");
+    cli_opts_t o;
+    const char *names[] = {"--log", "--summary-file", "--out", "--schedule", "--trace", "--jsonl",
+                           "--compare-codes"};
+    for (size_t i = 0; i < sizeof names / sizeof names[0]; i++) {
+        const char *a[] = {"x", names[i], "--quiet"};
+        CHECK(parse(&o, 3, a) != 0);
+    }
+    const char *ok[] = {"x", "--log=--quiet"};
+    CHECK_EQ_INT(parse(&o, 2, ok), 0);
+    CHECK(o.log_path != NULL && strcmp(o.log_path, "--quiet") == 0);
+    const char *norm[] = {"x", "--log", "run.csv", "--quiet"};
+    CHECK_EQ_INT(parse(&o, 4, norm), 0);
+    CHECK(strcmp(o.log_path, "run.csv") == 0 && o.quiet == 1);
+}
+
 /* Retransmission and controller flags reach cli_opts_t and adapt_params_t; an unknown strategy is rejected. */
 TEST(strategy_and_adaptive_flags) {
     cli_opts_t o;
@@ -167,6 +186,7 @@ int main(void) {
     RUN(common_flags);
     RUN(model_defaults_to_profile_model);
     RUN(rejects_bad_input);
+    RUN(value_flag_does_not_swallow_next_flag);
     RUN(strategy_and_adaptive_flags);
     RUN(failure_injection_flags);
     RUN(seeds_flag);

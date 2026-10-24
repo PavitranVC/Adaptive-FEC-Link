@@ -22,6 +22,8 @@
 #include <stdint.h>
 
 #define FEEDBACK_BYTES 22
+#define FEEDBACK_NO_LEVEL 255   /* level field: transmission was not a ladder code */
+#define FEEDBACK_MAX_WINDOW 1024 /* largest win_n accepted (the CLI caps --window at 1024) */
 enum { FB_ACK = 1, FB_NAK = 2 };
 
 typedef struct {
@@ -35,7 +37,7 @@ typedef struct {
 
 /* Returns FEEDBACK_BYTES, or 0 if cap is too small. */
 size_t feedback_serialize(const feedback_t *f, uint8_t *buf, size_t cap);
-/* Returns 0 on success, -1 if malformed. */
+/* Returns 0 on success, -1 if malformed (bad framing, or level / window counters out of range). */
 int feedback_parse(const uint8_t *buf, size_t len, feedback_t *f);
 
 #endif /* FEEDBACK_H */

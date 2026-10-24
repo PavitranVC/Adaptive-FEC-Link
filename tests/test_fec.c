@@ -125,6 +125,18 @@ TEST(secded_failure_is_reported) {
     CHECK_EQ_INT(res.blocks, 32);
 }
 
+TEST(oversized_or_mismatched_sizes_are_rejected) {
+    fec_config_t c = fec_config(CODE_NONE);
+    uint8_t payload[3000] = {0}, coded[3000] = {0}, out[3000];
+    fec_result_t res;
+    CHECK_EQ_INT(fec_encode(&c, payload, 3000, coded), 0);       /* > FEC_MAX_CODED_BITS: used to overflow */
+    fec_decode(&c, coded, 3000, out, 3000, &res);               /* likewise */
+    CHECK(res.failed_blocks > 0);
+    c = fec_config(CODE_HAMMING74);
+    fec_decode(&c, coded, 100, out, 128, &res);                  /* 100 bits: not whole blocks, short */
+    CHECK(res.failed_blocks > 0);
+}
+
 int main(void) {
     RUN(names_roundtrip);
     RUN(coded_sizes);
@@ -132,5 +144,6 @@ int main(void) {
     RUN(all_codes_fix_one_error_per_block);
     RUN(bch_codes_fix_t_errors_per_block);
     RUN(secded_failure_is_reported);
+    RUN(oversized_or_mismatched_sizes_are_rejected);
     return TEST_REPORT();
 }

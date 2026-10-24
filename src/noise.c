@@ -129,6 +129,7 @@ const char *noise_model_name(noise_model_t m) {
 }
 
 int noise_model_from_name(const char *name, noise_model_t *out) {
+    if (!name || !out) return -1;   /* Rejects NULL arguments: strcmp / the store would crash. */
     for (int i = 0; i < 3; i++)
         if (strcmp(name, MODEL_NAMES[i]) == 0) { *out = (noise_model_t)i; return 0; }
     return -1;

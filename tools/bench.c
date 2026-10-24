@@ -43,6 +43,7 @@
  *   (code "ladder_rs"); in --seeds mode the original mixed-ladder adaptive row is added on the
  *   same seeds and <out>_diff.csv also holds adaptive_rs - adaptive_mixed. Default: mixed.
  */
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "cli.h"
@@ -99,20 +100,43 @@ static int has_flag(int argc, char **argv, const char *flag) {
 
 /* --compare-codes a,b,c: exactly these codes (no interleaved variants), in that order;
  * "rs_t8" = Reed-Solomon with t = 8 (plain "rs" uses --rs-t).
- * "rs_t<N>" is parsed with sscanf, so trailing text after the number is ignored and N is only
- * checked by fec_config_valid() (unsupported t is rejected there).
- * The list is copied into a 256-byte buffer (longer lists are silently cut), entries beyond
- * `cap` are silently dropped, and names are truncated to the 31 chars of variant_t.name.
- * Returns the number of variants, -1 for an unknown or invalid code name. */
+ * "rs_t<N>" must be digits only (so "rs_t8x" is rejected); N is further checked by
+ * fec_config_valid() (unsupported t is rejected there).
+ * A list longer than the 256-byte buffer, more than `cap` entries or a name longer than the 31
+ * chars of variant_t.name is an error, never silently cut.
+ * Returns the number of variants, -1 for an unknown, invalid or too long code name or list. */
 static int compare_variants(const cli_opts_t *o, variant_t *vs, int cap) {
     char list[256];
     int nv = 0;
+    /* Reject what would be truncated or dropped below. */
+    if (strlen(o->compare_codes) >= sizeof list) {
+        fprintf(stderr, "error: --compare-codes list longer than %d characters\n",
+                (int)sizeof list - 1);
+        return -1;
+    }
     snprintf(list, sizeof list, "%s", o->compare_codes);
-    for (char *name = strtok(list, ","); name && nv < cap; name = strtok(NULL, ",")) {
+    for (char *name = strtok(list, ","); name; name = strtok(NULL, ",")) {
         code_id_t code;
         int t = o->rs_t;
-        if (!strncmp(name, "rs_t", 4) && sscanf(name + 4, "%d", &t) == 1) code = CODE_RS;
-        else if (fec_code_from_name(name, &code)) {
+        if (nv >= cap) {
+            fprintf(stderr, "error: more than %d codes in --compare-codes\n", cap);
+            return -1;
+        }
+        if (strlen(name) >= sizeof vs[nv].name) {
+            fprintf(stderr, "error: code name '%s' in --compare-codes is longer than %d characters\n",
+                    name, (int)sizeof vs[nv].name - 1);
+            return -1;
+        }
+        if (!strncmp(name, "rs_t", 4) && name[4] >= '0' && name[4] <= '9') {
+            char *end;
+            long tv = strtol(name + 4, &end, 10);
+            if (*end || tv > 255) {      /* trailing text such as "rs_t8x", or absurd t */
+                fprintf(stderr, "error: invalid code '%s' in --compare-codes\n", name);
+                return -1;
+            }
+            t = (int)tv;
+            code = CODE_RS;
+        } else if (fec_code_from_name(name, &code)) {
             fprintf(stderr, "error: unknown code '%s' in --compare-codes\n", name);
             return -1;
         }
@@ -307,11 +331,12 @@ static int find_row(const strat_row_t *rows, int nrows, strategy_t s, code_id_t 
     return -1;
 }
 
-/* "results/x.csv" + "_raw" -> "results/x_raw.csv". The extension is found with strrchr over
- * the WHOLE path, so a dot in a directory name ("out.d/run") is taken as the extension.
+/* "results/x.csv" + "_raw" -> "results/x_raw.csv". The extension is looked for only after the
+ * last '/', so a dot in a directory name ("out.d/run") is not taken as the extension.
  * Output is truncated silently to `cap` bytes. */
 static void sibling_path(const char *path, const char *suffix, char *out, size_t cap) {
-    const char *dot = strrchr(path, '.');
+    const char *slash = strrchr(path, '/');
+    const char *dot = strrchr(slash ? slash : path, '.');
     size_t stem = dot ? (size_t)(dot - path) : strlen(path);
     snprintf(out, cap, "%.*s%s%s", (int)stem, path, suffix, dot ? dot : "");
 }

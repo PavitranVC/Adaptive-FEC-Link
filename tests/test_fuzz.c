@@ -137,9 +137,9 @@ TEST(fuzz_feedback_parse) {
             f.type = rng_below(&r, 2) ? FB_ACK : FB_NAK;
             f.seq = (uint32_t)rng_next(&r);
             f.attempt = (uint8_t)rng_below(&r, 256);
-            f.level = (uint8_t)rng_below(&r, 256);
-            f.win_n = (uint16_t)rng_below(&r, 65536);
-            f.win_fail = (uint16_t)rng_below(&r, 65536);
+            f.level = (uint8_t)rng_below(&r, 8);               /* in range for the parser (<= 1024, fail <= n) */
+            f.win_n = (uint16_t)rng_below(&r, FEEDBACK_MAX_WINDOW + 1);
+            f.win_fail = (uint16_t)rng_below(&r, f.win_n + 1);
             f.win_corrected = (uint32_t)rng_next(&r);
             f.win_bits = (uint32_t)rng_next(&r);
             len = feedback_serialize(&f, buf, sizeof buf);

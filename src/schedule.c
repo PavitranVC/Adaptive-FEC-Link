@@ -1,3 +1,6 @@
+#include <ctype.h>
+#include <errno.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include "schedule.h"
@@ -11,8 +14,13 @@ static int parse_item(const char *item, size_t len, sched_seg_t *out) {
     if (!(colon = strchr(buf, ':'))) return -1;
     *colon = '\0';
     const profile_t *p = profile_by_name(buf);
+    /* Rejects what strtol would silently accept: leading space or a sign (" 5", "+5"), a count
+     * that overflows long (strtol saturates to LONG_MAX), and one above INT_MAX, so segment
+     * counts and their sum stay representable for callers that use int. */
+    if (!isdigit((unsigned char)colon[1])) return -1;
+    errno = 0;
     long n = strtol(colon + 1, &end, 10);
-    if (!p || colon[1] == '\0' || *end != '\0' || n <= 0) return -1;
+    if (!p || errno || *end != '\0' || n <= 0 || n > INT_MAX) return -1;
     out->profile = p;
     out->frames = n;
     return 0;
@@ -26,6 +34,9 @@ int schedule_parse(const char *spec, schedule_t *out) {
         const char *comma = strchr(p, ',');
         size_t len = comma ? (size_t)(comma - p) : strlen(p);
         if (out->n == SCHEDULE_MAX || parse_item(p, len, &out->seg[out->n]) != 0) return -1;
+        /* Rejects a schedule whose total exceeds INT_MAX: schedule_total() would overflow long
+         * arithmetic limits of callers and the segment boundaries would wrap. */
+        if (out->seg[out->n].frames > INT_MAX - schedule_total(out)) return -1;
         out->n++;
         if (!comma) return 0;
         p = comma + 1;
