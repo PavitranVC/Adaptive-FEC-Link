@@ -46,7 +46,7 @@ typedef struct {
     int max_retries;           /* --max-retries   default 4 */
     double fb_drop;            /* --fb-drop       probability the tollgate drops a feedback */
     int window;                /* --window        receiver sliding window W, default 32 */
-    double up_threshold;       /* --up-threshold   default 0.15 */
+    double up_threshold;       /* --up-threshold   default 0.20 */
     double down_threshold;     /* --down-threshold default 0.05 */
     int start_level;           /* --start-level    adaptive start level, default 1 */
     const char *schedule;      /* --schedule "toll:200,hospital:200" (channel) */

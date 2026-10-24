@@ -1,7 +1,12 @@
-/* Tests for the channel profile schedule "toll:200,hospital:200,toll:200". */
+/*
+ * Tests schedule.c: parsing of "profile:frames,..." specs and mapping transmission index to segment.
+ * A failure means the channel would switch interference profile at the wrong transmission, or
+ * accept a malformed --schedule instead of refusing to start.
+ */
 #include "testlib.h"
 #include "schedule.h"
 
+/* Well-formed specs yield the right profiles, frame counts and total. */
 TEST(parse_valid) {
     schedule_t s;
     CHECK_EQ_INT(schedule_parse("toll:200,hospital:150,toll:50", &s), 0);
@@ -13,6 +18,7 @@ TEST(parse_valid) {
     CHECK_EQ_INT(s.n, 1);
 }
 
+/* Empty, missing count, zero count, unknown profile, empty item and trailing garbage are all rejected. */
 TEST(parse_invalid) {
     schedule_t s;
     CHECK(schedule_parse("", &s) != 0);
@@ -24,6 +30,7 @@ TEST(parse_invalid) {
     CHECK(schedule_parse("toll:10x", &s) != 0);
 }
 
+/* Segment switch happens exactly at the cumulative boundary, and the last segment stays in force past the end. */
 TEST(segment_lookup_and_last_segment_persists) {
     schedule_t s;
     schedule_parse("toll:3,hospital:2", &s);
@@ -31,6 +38,7 @@ TEST(segment_lookup_and_last_segment_persists) {
     for (long tx = 0; tx < 8; tx++) CHECK_EQ_INT(schedule_segment_at(&s, tx), want[tx]);
 }
 
+/* schedule_to_linksim copies segment count, frames and each profile's default noise model. */
 TEST(to_linksim_segments) {
     schedule_t s;
     schedule_parse("toll:100,hospital:100", &s);

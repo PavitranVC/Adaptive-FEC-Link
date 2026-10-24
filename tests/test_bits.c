@@ -1,8 +1,12 @@
-/* Tests for bit utilities (include/bits.h). */
+/*
+ * Tests bits.c: one-bit-per-byte vectors vs packed bytes (MSB first), weight, distance, string form.
+ * Every coder and the wire format depend on this bit order; a failure here corrupts all of them.
+ */
 #include <string.h>
 #include "testlib.h"
 #include "bits.h"
 
+/* Bit order: bit 0 is the most significant bit of byte 0. */
 TEST(unpack_is_msb_first) {
     uint8_t bytes[1] = {0xA5}; /* 1010 0101 */
     uint8_t bits[8];
@@ -11,6 +15,7 @@ TEST(unpack_is_msb_first) {
     CHECK(memcmp(bits, want, 8) == 0);
 }
 
+/* Pack and unpack are inverses for a whole byte-aligned vector. */
 TEST(pack_unpack_roundtrip) {
     uint8_t bytes[16], bits[128], back[16];
     for (int i = 0; i < 16; i++) bytes[i] = (uint8_t)(i * 37 + 11);
@@ -19,6 +24,7 @@ TEST(pack_unpack_roundtrip) {
     CHECK(memcmp(bytes, back, 16) == 0);
 }
 
+/* A partial last byte is zero-padded even if the buffer held stale data; bytes_for rounds up at the 8/9 boundary. */
 TEST(pack_pads_partial_byte_with_zeros) {
     const uint8_t bits[3] = {1, 1, 1};
     uint8_t out[1] = {0xFF};
@@ -29,6 +35,7 @@ TEST(pack_pads_partial_byte_with_zeros) {
     CHECK_EQ_INT(bits_bytes_for(9), 2);
 }
 
+/* Hamming weight and distance, including identical inputs (distance 0). */
 TEST(weight_and_distance) {
     const uint8_t a[6] = {1, 0, 1, 1, 0, 0};
     const uint8_t b[6] = {1, 1, 0, 1, 0, 1};
@@ -37,6 +44,7 @@ TEST(weight_and_distance) {
     CHECK_EQ_INT(bits_distance(a, a, 6), 0);
 }
 
+/* Text form is '0'/'1' characters plus a terminating NUL. */
 TEST(to_string) {
     const uint8_t a[5] = {1, 0, 0, 1, 1};
     char s[6];
