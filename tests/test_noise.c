@@ -159,6 +159,7 @@ TEST(profiles_lookup_and_sanity) {
     const profile_t *h = profile_by_name("hospital");
     CHECK(t != NULL && h != NULL);
     CHECK(profile_by_name("nope") == NULL);
+    CHECK(profile_by_name(NULL) == NULL);              /* NULL name must not crash */
     CHECK(t == &PROFILE_TOLL_PLAZA);
     CHECK(profile_by_id(profile_id(t)) == t && profile_by_id(profile_id(h)) == h);
     CHECK(profile_by_id(7) == NULL);
@@ -206,6 +207,8 @@ TEST(model_names) {
     CHECK(noise_model_from_name("ge", &m) == 0 && m == NOISE_GE);
     CHECK(noise_model_from_name("burst", &m) == 0 && m == NOISE_BURST);
     CHECK(noise_model_from_name("x", &m) != 0);
+    CHECK(noise_model_from_name(NULL, &m) != 0);       /* NULL name must not crash */
+    CHECK(noise_model_from_name("bsc", NULL) != 0);
     CHECK(strcmp(noise_model_name(NOISE_GE), "ge") == 0);
 }
 

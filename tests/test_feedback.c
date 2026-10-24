@@ -152,6 +152,16 @@ TEST(max_retries_clamped_to_wire_range) {
     CHECK_EQ_INT(snd.max_retries, 0);
 }
 
+/* sender_init with a NULL code or NULL sender must not crash; a NULL code falls back to hamming74. */
+TEST(sender_init_null_arguments) {
+    sender_t snd;
+    sender_init(&snd, STRAT_HARQ, NULL, NULL, 4);
+    CHECK(snd.fixed.code == CODE_HAMMING74);
+    CHECK_EQ_INT(snd.max_retries, 4);
+    fec_config_t fc = fec_config(CODE_BCH157);
+    sender_init(NULL, STRAT_HARQ, &fc, NULL, 4);
+}
+
 int main(void) {
     RUN(feedback_roundtrip);
     RUN(feedback_parse_rejects_out_of_range_fields);
@@ -162,5 +172,6 @@ int main(void) {
     RUN(stale_and_duplicate_feedback_is_ignored);
     RUN(timeout_gives_up_after_max_retries);
     RUN(max_retries_clamped_to_wire_range);
+    RUN(sender_init_null_arguments);
     return TEST_REPORT();
 }
