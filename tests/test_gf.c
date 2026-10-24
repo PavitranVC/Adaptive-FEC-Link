@@ -52,11 +52,19 @@ TEST(pow_and_known_values) {
     CHECK_EQ_INT(gf_exp(&f, -1), gf_exp(&f, 14));
 }
 
+TEST(polynomial_wider_than_m_rejected) {
+    gf_t f;
+    CHECK(gf_init(&f, 8, 0x31D) != 0);   /* x^9 term: reduction would index log[] past 255 */
+    CHECK(gf_init(&f, 4, 0x113) != 0);
+    CHECK(gf_init(&f, 8, 0x11D) == 0);
+}
+
 int main(void) {
     RUN(gf16_is_a_field);
     RUN(gf32_is_a_field);
     RUN(gf256_is_a_field);
     RUN(non_primitive_polynomial_rejected);
     RUN(pow_and_known_values);
+    RUN(polynomial_wider_than_m_rejected);
     return TEST_REPORT();
 }

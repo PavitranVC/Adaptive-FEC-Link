@@ -63,7 +63,15 @@ TEST(bernoulli_rate) {
     CHECK_NEAR(hits / 100000.0, 0.25, 0.007);
 }
 
+TEST(below_zero_does_not_crash) {
+    rng_t r;
+    rng_seed(&r, 3);
+    CHECK_EQ_INT(rng_below(&r, 0), 0);   /* used to divide by zero */
+    CHECK_EQ_INT(rng_below(&r, 1), 0);
+}
+
 int main(void) {
+    RUN(below_zero_does_not_crash);
     RUN(same_seed_same_sequence);
     RUN(different_seeds_differ);
     RUN(known_first_output_is_stable);
