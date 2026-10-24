@@ -63,10 +63,10 @@ banner "4. Live dashboard"
 setsid make dashboard >results/tmp/dashboard.log 2>&1 & DP=$!; PGS+=($DP)
 sleep 3
 echo "Open: http://127.0.0.1:${PORT:-8050}/"
-if [ $PAUSE = 1 ]; then read -r -p "[Enter to stop the dashboard] " _; else sleep 5; fi
-kill -TERM -- "-$DP" 2>/dev/null; PGS=()
-pkill -f "bin/(vehicle|channel|tollgate)" 2>/dev/null
-result 4 0
+[ $PAUSE = 1 ] && read -r -p "[Enter to continue; the dashboard stays up until the end] " _
+echo "waiting for the dashboard demo to finish (page stays up)..."
+sleep 2; for _ in $(seq 90); do pgrep -f "bin/(vehicle|channel|tollgate)" >/dev/null || break; sleep 1; done
+kill -0 $DP 2>/dev/null; result 4 $?
 
 # 5. comparison
 banner "5. hamming74 vs bch157 (make compare)"
@@ -75,5 +75,6 @@ make compare; result 5 $?
 # 6. plots
 banner "6. Committed plots"
 ls results/*.png; result 6 $?
+[ $PAUSE = 1 ] && read -r -p "Dashboard still at http://127.0.0.1:${PORT:-8050}/ [Enter to finish and stop it] " _
 [ $FAILED = 0 ] && echo "ALL STEPS PASSED" || echo "SOME STEPS FAILED"
 exit $FAILED
